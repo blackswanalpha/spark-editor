@@ -82,9 +82,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
-            patchelf \
-            libsoup-3.0-dev \
-            javascriptcoregtk4.1-dev
+            patchelf
 
       - name: Cargo check (lib)
         working-directory: src-tauri
