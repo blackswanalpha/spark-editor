@@ -26,7 +26,7 @@ import { ThemeProvider, useTheme } from "@theme/ThemeProvider";
 import { ToastProvider, useToast } from "@ui/Toast";
 import { useDocs } from "@store/documents";
 import { readFile, recentsAdd, recentsGet, isTauri } from "@bridge/commands";
-import { buildCommands, bindPalette, type CommandSpec } from "@commands/registry";
+import { buildCommands, bindPalette, type CommandSpec, currentRoot, setCurrentRoot } from "@commands/registry";
 import { Button } from "@ui/Button";
 import { Icon } from "@ui/Icon";
 import OpenDialog from "@ui/OpenDialog";
@@ -51,6 +51,7 @@ function Shell() {
   const [showStatus, setShowStatus] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [recents, setRecents] = useState<{ path: string; name: string }[]>([]);
+  const [root, setRoot] = useState<string | null>(currentRoot);
 
   const commandsRef = useRef<CommandSpec[]>([]);
   commandsRef.current = useMemo(() => buildCommands(), [paletteOpen]); // rebuild when palette visibility toggles
@@ -112,6 +113,18 @@ function Shell() {
       window.removeEventListener("spark:toggleSidebar", sb);
       window.removeEventListener("spark:toggleStatusBar", st);
     };
+  }, []);
+
+  // Folder open
+  useEffect(() => {
+    const onFolderOpen = (e: Event) => {
+      const ev = e as CustomEvent<{ path: string }>;
+      if (!ev.detail?.path) return;
+      setRoot(ev.detail.path);
+      setCurrentRoot(ev.detail.path);
+    };
+    window.addEventListener("spark:folder:open", onFolderOpen);
+    return () => window.removeEventListener("spark:folder:open", onFolderOpen);
   }, []);
 
   const activeDoc = active ? docs[active] : null;
