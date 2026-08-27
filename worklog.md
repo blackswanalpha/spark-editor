@@ -4,6 +4,13 @@ Chronological build log. Each entry is dated, scoped, and linked to the Changelo
 
 ---
 
+## 2026-08-27 — File explorer port from designlabs
+
+- **Scope:** `src/shell/SideBar.tsx`, `src/shell/SideBar.css`, `src/store/explorer.ts`, `src/bridge/{commands,events}.ts`, `src-tauri/src/lib.rs`, `docs/reference/{renderer-modules,host-commands}.md`, `changelog/CHANGELOG.md`.
+- **What:** Ported the designlab file explorer (`designlabs/labs/explorer.html`) to the React shell. Lazy `read_dir` per directory via a new zustand+immer store (`useExplorer`); tree-view keyboard contract (↑↓ →← Enter Home End); toolbar (new file, refresh, collapse, show hidden); loader row; empty-folder state; recents tab preserved. Added host commands `create_file` (refuses to overwrite, returns `FileStat`) and `mkdir` (`mkdir -p`, idempotent) in `src-tauri/src/lib.rs`. Added `watchPath` / `unwatchPath` typed wrappers and `onFileChanged` event subscriber. Explorer folder root sourced from explicit `file.openFolder` first, then falls back to the active document's parent directory.
+- **Decisions:** Keep the explorer store separate from the document store — different concern, different lifecycle. Use `window.prompt` for the new-file name this iteration (a proper popover is a follow-up).
+- **Verification:** `npm run typecheck`, `npm run lint`, `npm run test`, `npm run build`; `cargo check` on `src-tauri/`.
+
 ## 2026-08-27 — Documentation pass (README / explanation / description / changelog scaffolding)
 
 - **Scope:** `README.md`, `explanation.md`, `description.md`, `worklog.md`, `changelog/` — `sparkEditor-main/` package.
