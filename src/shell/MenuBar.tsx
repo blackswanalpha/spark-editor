@@ -201,7 +201,7 @@ export function MenuBar({ commands, hasActiveDoc = true }: MenuBarProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openMenu, topLevels]);
+  }, [openMenu, topLevels, openIndex]);
 
   /* Cleanup any pending hover timer. */
   useEffect(() => () => {
@@ -211,7 +211,7 @@ export function MenuBar({ commands, hasActiveDoc = true }: MenuBarProps) {
   return (
     <div
       ref={rootRef}
-      className="menubar"
+      className="menubar app__menubar"
       role="menubar"
       aria-label="Application menu"
       data-tauri-drag-region={false}

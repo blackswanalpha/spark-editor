@@ -15,6 +15,7 @@ import { Icon } from "@ui/Icon";
 import { Spinner as Loader } from "@ui/Loader";
 import { useExplorer, type ExplorerNode } from "@store/explorer";
 import { splitPath } from "@bridge/commands";
+import { fileIconFor } from "@editor/CodeEditor/languages";
 import "./SideBar.css";
 
 export interface RecentsEntry { path: string; name: string; }
@@ -413,7 +414,7 @@ function TreeRow({
           <Icon name="chevron-right" size={12} />
         </span>
         <span className="tree-item__icon" aria-hidden>
-          <Icon name={node.isDir ? "folder" : pickFileIcon(node.name)} size={14} />
+          <Icon name={node.isDir ? "folder" : fileIconFor(node.name)} size={14} />
         </span>
         <span className="tree-item__name">{node.name}</span>
       </button>
@@ -442,10 +443,4 @@ function LoadingGroup() {
       </div>
     </div>
   );
-}
-
-function pickFileIcon(name: string): string {
-  if (/\.(md|markdown)$/i.test(name)) return "mode-markdown";
-  if (/\.(ts|tsx|js|jsx|json|html|css|scss|py|rs|go|java|c|cpp|h|hpp|sh|yaml|yml|toml)$/i.test(name)) return "file-code";
-  return "file";
 }

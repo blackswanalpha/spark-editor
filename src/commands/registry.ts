@@ -8,7 +8,6 @@ import {
   readFile,
   writeFile,
   recentsAdd,
-  recentsGet,
   openFileDialog,
   openFolderDialog,
   saveFileDialog,

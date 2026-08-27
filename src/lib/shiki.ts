@@ -6,14 +6,12 @@
    ============================================================ */
 import { createHighlighter, type Highlighter, type BundledLanguage, type BundledTheme } from "shiki";
 import { themeTokens } from "./themeTokens";
+import { LANG_SHIKI, LANG_FILE_EXTRA } from "@editor/CodeEditor/languages";
 
 let highlighter: Highlighter | null = null;
 let initPromise: Promise<Highlighter> | null = null;
 
-const LANGS: BundledLanguage[] = [
-  "ts", "tsx", "js", "jsx", "json", "html", "css", "scss",
-  "python", "rust", "go", "java", "c", "cpp", "bash", "yaml", "toml", "sql", "md",
-];
+const LANGS: BundledLanguage[] = Array.from(new Set(Object.values(LANG_SHIKI))) as BundledLanguage[];
 
 export async function getHighlighter(): Promise<Highlighter> {
   if (highlighter) return highlighter;
@@ -30,14 +28,17 @@ export function getHighlighterSync(): Highlighter | null {
   return highlighter;
 }
 
-const LANG_ALIAS: Record<string, string> = {
-  typescript: "ts", javascript: "js", py: "python", rs: "rust", sh: "bash", yml: "yaml", md: "md", markdown: "md",
-};
+const SHIKI_VALUES = new Set<string>(Object.values(LANG_SHIKI));
 
 export function resolveLang(name?: string): string {
   if (!name) return "txt";
   const k = name.toLowerCase();
-  return LANG_ALIAS[k] ?? (LANGS as readonly string[]).includes(k) ? k : "txt";
+  // 1) alias
+  const aliased = LANG_FILE_EXTRA[k];
+  if (aliased && LANG_SHIKI[aliased]) return LANG_SHIKI[aliased];
+  // 2) direct
+  if (SHIKI_VALUES.has(k)) return k;
+  return "txt";
 }
 
 export interface HighlightResult { html: string; bg: string; fg: string }
