@@ -1,0 +1,88 @@
+/* ============================================================
+   sparkEditor · src/ui/Button.css
+   ============================================================ */
+.btn {
+  --btn-h: 28px;
+  --btn-px: 10px;
+  --btn-fs: var(--size-md);
+  --btn-icon-size: 16px;
+  --btn-bg: var(--surface-2);
+  --btn-fg: var(--text);
+  --btn-border: var(--border);
+  --btn-hover-bg: var(--surface-3);
+  --btn-active-bg: var(--surface-4);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--btn-h);
+  padding: 0 var(--btn-px);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: var(--btn-fs);
+  font-weight: 500;
+  line-height: 1;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid var(--btn-border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition:
+    background var(--t-fast) var(--ease),
+    color      var(--t-fast) var(--ease),
+    border     var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease);
+}
+
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:hover:not(:disabled) { background: var(--btn-hover-bg); }
+.btn:active:not(:disabled) { background: var(--btn-active-bg); }
+
+.btn--primary {
+  --btn-bg: var(--accent);
+  --btn-fg: var(--accent-fg);
+  --btn-border: var(--accent);
+  --btn-hover-bg: var(--accent-hover);
+  --btn-active-bg: var(--accent-active);
+  font-weight: 600;
+}
+.btn--secondary { /* default */ }
+.btn--ghost {
+  --btn-bg: transparent;
+  --btn-border: transparent;
+  --btn-hover-bg: var(--surface-3);
+}
+.btn--danger {
+  --btn-bg: transparent;
+  --btn-fg: var(--danger);
+  --btn-border: var(--border);
+  --btn-hover-bg: color-mix(in srgb, var(--danger) 12%, transparent);
+  --btn-active-bg: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+.btn--icon {
+  --btn-px: 0;
+  width: var(--btn-h);
+  padding: 0;
+}
+
+.btn--sm { --btn-h: 22px; --btn-px: 8px; --btn-fs: var(--size-sm); --btn-icon-size: 14px; }
+.btn--md { /* default */ }
+.btn--lg { --btn-h: 34px; --btn-px: 14px; --btn-fs: var(--size-lg); --btn-icon-size: 18px; }
+
+.btn--block { width: 100%; }
+
+.btn__icon { display: inline-flex; }
+.btn__label { display: inline-flex; }
+
+.btn.is-loading .btn__label { opacity: 0.5; }
+
+.btn__spinner {
+  width: 12px; height: 12px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }

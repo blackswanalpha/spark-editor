@@ -1,0 +1,306 @@
+/* ============================================================
+   sparkEditor · src/theme/tokens.css
+   Design tokens for the renderer.
+   Typography sourced from designlabs/assets/fonts/ (Inter & JetBrains Mono).
+   Themes: light (default), dark, navy. "system" follows the OS.
+   Contrast pairs target WCAG 2.2 AA.
+   ============================================================ */
+
+/* ---------- Fonts (offline-first, woff2 variable subsets) ----------
+   Local files mirror designlabs/assets/fonts/. Additionally
+   @fontsource-variable/jetbrains-mono is installed via npm for
+   robust coding typography (normal + italic variable, cyrillic/greek
+   subsets, bundled by Vite). The Variable family is preferred when
+   available; local "JetBrains Mono" is the offline fallback.
+   ------------------------------------------------------------------ */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/inter-latin-var.woff2") format("woff2");
+}
+
+/* Local JetBrains Mono — latin variable, normal */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("../assets/fonts/jetbrains-mono-latin-var.woff2") format("woff2");
+}
+
+/* Local JetBrains Mono — latin variable, italic (synthetic oblique
+   fallback; full italic variable is provided by @fontsource-variable
+   when bundled). Keeps <em> / comment italic from hitting system mono. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("../assets/fonts/jetbrains-mono-latin-var.woff2") format("woff2");
+}
+
+:root {
+  /* ---------- Typography ---------- */
+  --font-ui:   "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Coding typography: Variable first (npm), then local, then system mono.
+     Enables ligatures (liga/calt) and keeps X-height aligned for code. */
+  --font-code: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-code-features: "liga" 1, "calt" 1, "zero" 0, "ss01" 0;
+  --font-code-ligatures: contextual common-ligatures;
+
+  --size-xs:  11px;
+  --size-sm:  12px;
+  --size-md:  13.5px;
+  --size-lg:  16px;
+  --size-xl:  20px;
+  --size-2xl: 26px;
+
+  --lh-tight: 1.2;
+  --lh-base:  1.5;
+  --lh-loose: 1.7;
+
+  /* ---------- Spacing & shape ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* ---------- Motion (consumed by motion/index.ts) ---------- */
+  --ease:        cubic-bezier(0.2, 0.6, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --t-fast:   120ms;
+  --t-med:    200ms;
+  --t-slow:   320ms;
+  --t-slower: 480ms;
+
+  /* ---------- Z-layers ---------- */
+  --z-toolbar: 10;
+  --z-menu:    20;
+  --z-overlay: 30;
+  --z-modal:   40;
+  --z-toast:   50;
+  --z-splash:  100;
+}
+
+/* ===================================================================
+   THEME 1: LIGHT  (default)
+   =================================================================== */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:           #eef0f4;
+  --surface-1:    #ffffff;
+  --surface-2:    #f6f7f9;
+  --surface-3:    #eceef2;
+  --surface-4:    #e1e5ec;
+  --border:       #d5d9e0;
+  --border-strong:#b9bfc9;
+
+  --text:        #24292f;
+  --text-muted:  #5a6270;
+  --text-faint:  #8b93a1;
+  --on-accent:   #ffffff;
+
+  --accent:        #2f6bde;
+  --accent-hover:  #2758bb;
+  --accent-active: #1f4a9c;
+  --accent-soft:   #e3ecff;
+  --accent-fg:     #ffffff;
+
+  --success:     #1a7f37;
+  --warning:     #9a6700;
+  --danger:      #c62828;
+  --info:        #2f6bde;
+
+  --selection:   rgba(47, 107, 222, 0.18);
+  --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.08);
+  --shadow-2: 0 4px 16px rgba(16, 24, 40, 0.12);
+  --shadow-3: 0 12px 40px rgba(16, 24, 40, 0.18);
+
+  /* Syntax palette (scanned vs surface-1 per A11Y-003) */
+  --syn-keyword: #a626a4;
+  --syn-string:  #1a7f37;
+  --syn-number:  #b25e09;
+  --syn-comment: #8b93a1;
+  --syn-func:    #2f6bde;
+  --syn-tag:     #c62828;
+  --syn-type:    #1f4a9c;
+  --syn-regex:   #b25e09;
+  --syn-attr:    #6f4e37;
+}
+
+/* ===================================================================
+   THEME 2: DARK
+   =================================================================== */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg:           #14171c;
+  --surface-1:    #1c2027;
+  --surface-2:    #232830;
+  --surface-3:    #2d333d;
+  --surface-4:    #353c48;
+  --border:       #3a4150;
+  --border-strong:#4c5468;
+
+  --text:        #e6e9ee;
+  --text-muted:  #a2abb8;
+  --text-faint:  #6c7686;
+  --on-accent:   #0e1524;
+
+  --accent:        #6d9bff;
+  --accent-hover:  #89adff;
+  --accent-active: #a8c2ff;
+  --accent-soft:   #263450;
+  --accent-fg:     #0e1524;
+
+  --success:     #57ab5a;
+  --warning:     #d9a53f;
+  --danger:      #f47067;
+  --info:        #6d9bff;
+
+  --selection:   rgba(109, 155, 255, 0.28);
+  --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 12px 40px rgba(0, 0, 0, 0.55);
+
+  --syn-keyword: #d2a8ff;
+  --syn-string:  #7ee787;
+  --syn-number:  #ffb86b;
+  --syn-comment: #6c7686;
+  --syn-func:    #79c0ff;
+  --syn-tag:     #ff7b72;
+  --syn-type:    #ffa657;
+  --syn-regex:   #f97583;
+  --syn-attr:    #b392f0;
+}
+
+/* ===================================================================
+   THEME 3: NAVY BLUE
+   A third personality: deep ocean blues with cyan accents.
+   "system" falls back to this only if a saved preference is "navy".
+   =================================================================== */
+:root[data-theme="navy"] {
+  color-scheme: dark;
+
+  --bg:           #0a1628;
+  --surface-1:    #0f1d33;
+  --surface-2:    #152544;
+  --surface-3:    #1c2f55;
+  --surface-4:    #243a68;
+  --border:       #2a4070;
+  --border-strong:#3a5290;
+
+  --text:        #eaf2ff;
+  --text-muted:  #9fb4d6;
+  --text-faint:  #6c84a8;
+  --on-accent:   #021024;
+
+  --accent:        #4dd0e1;
+  --accent-hover:  #6ee0ef;
+  --accent-active: #26c6da;
+  --accent-soft:   #0a3a4a;
+  --accent-fg:     #021024;
+
+  --success:     #4ade80;
+  --warning:     #fbbf24;
+  --danger:      #f87171;
+  --info:        #4dd0e1;
+
+  --selection:   rgba(77, 208, 225, 0.25);
+  --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.6);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.55);
+  --shadow-3: 0 12px 40px rgba(0, 0, 0, 0.7);
+
+  --syn-keyword: #c792ea;
+  --syn-string:  #c3e88d;
+  --syn-number:  #f78c6c;
+  --syn-comment: #6c84a8;
+  --syn-func:    #82aaff;
+  --syn-tag:     #ff5370;
+  --syn-type:    #ffcb6b;
+  --syn-regex:   #f78c6c;
+  --syn-attr:    #c792ea;
+}
+
+/* ===================================================================
+   SYSTEM: when data-theme="system", follow OS via prefers-color-scheme.
+   Maps to the dark tokens (it would be equivalent to light too if the
+   user prefers light — see the @media blocks below).
+   =================================================================== */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    color-scheme: dark;
+    --bg: #14171c; --surface-1: #1c2027; --surface-2: #232830;
+    --surface-3: #2d333d; --surface-4: #353c48;
+    --border: #3a4150; --border-strong: #4c5468;
+    --text: #e6e9ee; --text-muted: #a2abb8; --text-faint: #6c7686; --on-accent: #0e1524;
+    --accent: #6d9bff; --accent-hover: #89adff; --accent-active: #a8c2ff;
+    --accent-soft: #263450; --accent-fg: #0e1524;
+    --success: #57ab5a; --warning: #d9a53f; --danger: #f47067; --info: #6d9bff;
+    --selection: rgba(109, 155, 255, 0.28);
+    --focus-ring: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+    --shadow-1: 0 1px 2px rgba(0,0,0,.5);
+    --shadow-2: 0 4px 16px rgba(0,0,0,.45);
+    --shadow-3: 0 12px 40px rgba(0,0,0,.55);
+    --syn-keyword: #d2a8ff; --syn-string: #7ee787; --syn-number: #ffb86b;
+    --syn-comment: #6c7686; --syn-func: #79c0ff; --syn-tag: #ff7b72;
+    --syn-type: #ffa657; --syn-regex: #f97583; --syn-attr: #b392f0;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+    --bg: #eef0f4; --surface-1: #ffffff; --surface-2: #f6f7f9;
+    --surface-3: #eceef2; --surface-4: #e1e5ec;
+    --border: #d5d9e0; --border-strong: #b9bfc9;
+    --text: #24292f; --text-muted: #5a6270; --text-faint: #8b93a1; --on-accent: #ffffff;
+    --accent: #2f6bde; --accent-hover: #2758bb; --accent-active: #1f4a9c;
+    --accent-soft: #e3ecff; --accent-fg: #ffffff;
+    --success: #1a7f37; --warning: #9a6700; --danger: #c62828; --info: #2f6bde;
+    --selection: rgba(47, 107, 222, 0.18);
+    --focus-ring: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+    --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.08);
+    --shadow-2: 0 4px 16px rgba(16, 24, 40, 0.12);
+    --shadow-3: 0 12px 40px rgba(16, 24, 40, 0.18);
+    --syn-keyword: #a626a4; --syn-string: #1a7f37; --syn-number: #b25e09;
+    --syn-comment: #8b93a1; --syn-func: #2f6bde; --syn-tag: #c62828;
+    --syn-type: #1f4a9c; --syn-regex: #b25e09; --syn-attr: #6f4e37;
+  }
+}
+
+/* ===================================================================
+   Reduced-motion respect
+   =================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0ms;
+    --t-med: 0ms;
+    --t-slow: 0ms;
+    --t-slower: 0ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -1,0 +1,175 @@
+/* ============================================================
+   sparkEditor · src/editor/editor.css
+   Common styles for all three editor surfaces.
+   ============================================================ */
+.editor, .editor * {
+  font-family: var(--font-ui);
+  font-size: var(--size-md);
+  line-height: var(--lh-base);
+}
+.editor--code, .editor--code .cm-editor, .editor--code .cm-content {
+  font-family: var(--font-code);
+  font-size: var(--size-md);
+  line-height: 1.6;
+  font-variant-ligatures: var(--font-code-ligatures);
+  font-feature-settings: var(--font-code-features);
+  font-optical-sizing: auto;
+}
+
+.editor {
+  flex: 1;
+  min-height: 0;
+  background: var(--surface-1);
+  color: var(--text);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+/* CodeMirror 6 */
+.cm-editor { height: 100%; }
+.cm-editor.cm-focused { outline: none; }
+.cm-scroller {
+  font-family: var(--font-code);
+  font-variant-ligatures: var(--font-code-ligatures);
+  font-feature-settings: var(--font-code-features);
+}
+.cm-gutters {
+  background: var(--surface-2) !important;
+  color: var(--text-faint) !important;
+  border-right: 1px solid var(--border) !important;
+}
+.cm-activeLine, .cm-activeLineGutter { background: var(--surface-3) !important; }
+.cm-cursor, .cm-dropCursor { border-left-color: var(--accent) !important; }
+.cm-selectionBackground, .cm-editor ::selection { background: var(--selection) !important; }
+.cm-foldPlaceholder {
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+  border: 1px solid var(--accent) !important;
+}
+
+/* Markdown editor split */
+.md-editor { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.md-editor__toolbar {
+  display: flex; align-items: center; gap: 2px;
+  padding: 4px 6px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.md-editor__divider {
+  width: 1px; height: 18px; background: var(--border); margin: 0 4px;
+}
+.md-editor__split {
+  display: grid;
+  grid-template-columns: 1fr;
+  flex: 1;
+  min-height: 0;
+}
+.md-editor--with-preview .md-editor__split {
+  grid-template-columns: 1fr 1fr;
+}
+.md-editor__split > .editor { min-width: 0; }
+.md-editor__preview {
+  border-left: 1px solid var(--border);
+  background: var(--surface-1);
+  overflow: auto;
+  padding: 16px 24px;
+}
+.md-rendered { color: var(--text); max-width: 720px; margin: 0 auto; }
+.md-rendered h1, .md-rendered h2, .md-rendered h3, .md-rendered h4, .md-rendered h5, .md-rendered h6 {
+  margin: 0.7em 0 0.3em;
+  color: var(--text);
+  line-height: 1.25;
+  font-weight: 700;
+}
+.md-rendered h1 { font-size: 1.6em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+.md-rendered h2 { font-size: 1.35em; }
+.md-rendered h3 { font-size: 1.15em; }
+.md-rendered p  { margin: 0.5em 0; }
+.md-rendered a  { color: var(--accent); }
+.md-rendered code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.md-rendered pre {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  overflow: auto;
+}
+.md-rendered pre code { background: transparent; border: 0; padding: 0; }
+.md-rendered blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 0.5em 0;
+  padding: 0.2em 0.8em;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.md-rendered ul, .md-rendered ol { padding-left: 1.4em; margin: 0.4em 0; }
+.md-rendered hr { border: 0; height: 1px; background: var(--border); margin: 1em 0; }
+
+/* Rich editor */
+.rich-editor { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--surface-1); }
+.rich-editor .ProseMirror {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 24px;
+  outline: none;
+  color: var(--text);
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+}
+.rich-editor .ProseMirror p { margin: 0.5em 0; }
+.rich-editor .ProseMirror h1 { font-size: 1.6em; margin: 0.6em 0 0.3em; }
+.rich-editor .ProseMirror h2 { font-size: 1.35em; margin: 0.6em 0 0.3em; }
+.rich-editor .ProseMirror blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.8em; color: var(--text-muted);
+}
+.rich-editor .ProseMirror pre.rich-code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-family: var(--font-code);
+  font-variant-ligatures: var(--font-code-ligatures);
+  font-feature-settings: var(--font-code-features);
+  font-size: var(--size-sm);
+}
+.rich-editor .ProseMirror a { color: var(--accent); }
+.rich-editor .ProseMirror code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-family: var(--font-code);
+  font-variant-ligatures: var(--font-code-ligatures);
+  font-feature-settings: var(--font-code-features);
+  font-size: 0.9em;
+}
+
+/* Bubble menu */
+.rich-bubble {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 4px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+}
+.rich-bubble__btn {
+  width: 24px; height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: transparent;
+}
+.rich-bubble__btn:hover { background: var(--surface-3); color: var(--text); }
+.rich-bubble__btn.is-active { background: var(--accent-soft); color: var(--accent); }
+.rich-bubble__sep { width: 1px; height: 16px; background: var(--border); margin: 0 2px; }

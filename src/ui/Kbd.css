@@ -1,0 +1,3 @@
+.kbd { /* uses base.css kbd by default; can override here */ }
+.kbd-chord { display: inline-flex; align-items: center; gap: 3px; }
+.kbd-plus { color: var(--text-faint); font-size: var(--size-xs); }

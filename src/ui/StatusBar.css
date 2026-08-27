@@ -1,0 +1,38 @@
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--size-xs);
+  user-select: none;
+  grid-area: status;
+}
+.status__seg {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 3px;
+}
+.status__seg:hover { background: var(--surface-3); }
+.status__mode { background: transparent; border: 0; cursor: pointer; color: inherit; font: inherit; }
+.status__chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--surface-3);
+  color: var(--text);
+}
+.status__chip--markdown { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.status__chip--rich     { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
+.status__chip--code     { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+.status__spacer { flex: 1; }
+.status__seg--dirty { color: var(--accent); }
+.status__lang { font-family: var(--font-code); }

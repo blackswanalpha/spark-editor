@@ -1,0 +1,1 @@
+sparkEditor is a Tauri + React desktop editor unifying Markdown, rich text, and code in one window. One block-structured IR powers CodeMirror/Tiptap surfaces, Zustand + Immer state, and a minimal Rust host. File is source of truth — no cloud, no lock-in, offline-first, custom shell, palette, themes.

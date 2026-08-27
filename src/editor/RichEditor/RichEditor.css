@@ -1,0 +1,123 @@
+/* ============================================================
+   sparkEditor · src/editor/RichEditor/RichEditor.css
+   Rich-editor-only styles. Lives next to the component so the
+   common editor.css stays untouched.
+   ============================================================ */
+
+/* ----------------------------------------------------------------
+   Top toolbar — mirrors .md-editor__toolbar but is scoped to the
+   rich surface so we can ship independently.
+   ---------------------------------------------------------------- */
+.rich-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.rich-toolbar__divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.rich-toolbar__spacer { flex: 1; }
+.rich-toolbar__status {
+  font-size: var(--size-sm);
+  color: var(--text-muted);
+  padding: 0 8px;
+  font-family: var(--font-ui);
+  user-select: none;
+}
+
+/* ----------------------------------------------------------------
+   Word-wrap toggle (toggled by the view.toggleWordWrap command).
+   ---------------------------------------------------------------- */
+.rich-editor { white-space: pre; }
+.rich-editor--wrap,
+.rich-editor--wrap .ProseMirror { white-space: pre-wrap; }
+
+/* ----------------------------------------------------------------
+   Slash menu (block-type picker).
+   Reuses the .rich-bubble visual language but lists rows that
+   act as ARIA options inside a listbox (A11Y-004).
+   ---------------------------------------------------------------- */
+.rich-slash {
+  position: fixed;
+  z-index: var(--z-menu);
+  min-width: 220px;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  padding: 4px;
+  font-family: var(--font-ui);
+  font-size: var(--size-sm);
+  color: var(--text);
+}
+.rich-slash__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.rich-slash__item:hover { background: var(--surface-3); }
+.rich-slash__item.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.rich-slash__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+}
+.rich-slash__item.is-active .rich-slash__icon { color: var(--accent); }
+.rich-slash__label { font-weight: 500; }
+.rich-slash__sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
+}
+
+/* ----------------------------------------------------------------
+   Inline link popover (replaces window.prompt).
+   ---------------------------------------------------------------- */
+.rich-linkpop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  min-width: 280px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+}
+.rich-linkpop__field { flex: 1; min-width: 0; }
+.rich-linkpop__btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.rich-linkpop__btn:hover { background: var(--surface-3); color: var(--text); }
+.rich-linkpop__btn--danger:hover { color: var(--danger, var(--accent)); }

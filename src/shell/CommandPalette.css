@@ -1,0 +1,131 @@
+/* Backdrop — dims the editor area only, NOT the titlebar (which stays
+   crisp as the OS chrome). The titlebar is 32px tall. */
+.cp__backdrop {
+  position: fixed;
+  top: 32px;        /* leave the titlebar undimmed */
+  left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: var(--z-modal);
+}
+
+/* Palette — sits below the titlebar, never overlaps it, never extends
+   past the viewport, and never lets its content rows overflow horizontally. */
+.cp {
+  position: fixed;
+  top: 64px;                                       /* clear of the 32px titlebar + 32px breathing room */
+  left: 50%;
+  translate: -50% 0;            /* independent of transform, so framer-motion's transform doesn't override centering */
+  width: min(640px, 92vw);
+  height: auto;                                    /* intrinsic by content */
+  max-height: calc(100vh - 96px);                  /* never past the viewport, with breathing room */
+  min-height: 120px;                               /* keep at least search + a few items visible */
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  z-index: var(--z-modal);
+  overflow: hidden;                                /* clip the rounded corners on children */
+}
+
+.cp__search {
+  flex: 0 0 auto;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+
+/* List area — must allow itself to shrink so flex: 1 works inside a
+   max-height parent. The classic flex-overflow fix. */
+.cp__list {
+  flex: 1 1 auto;
+  min-height: 0;                                   /* let it shrink below content size */
+  overflow: auto;
+  padding: 6px;
+  min-width: 0;                                    /* prevent the list from pushing the palette wider */
+}
+
+.cp__list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Each row — must NEVER exceed the palette width. Truncate long titles
+   and keep the icon / category / kbd at their natural size without
+   letting them push the row out. */
+.cp__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;                                    /* critical: allow the row to shrink to the parent width */
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--size-md);
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;                                /* belt-and-braces: hard-clip anything that does slip through */
+}
+
+.cp__item.is-active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.cp__icon {
+  flex: 0 0 auto;                                  /* never shrink the icon */
+  color: var(--text-muted);
+  display: inline-flex;
+}
+
+.cp__title {
+  flex: 1 1 auto;
+  min-width: 0;                                    /* critical: allow the title to truncate */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp__cat {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: var(--size-xs);
+  max-width: 12ch;                                 /* never let the category claim more than ~12 chars */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp__kbd {
+  flex: 0 0 auto;
+  font-family: var(--font-code);
+  font-size: var(--size-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.cp__empty {
+  padding: 12px;
+  color: var(--text-faint);
+  font-size: var(--size-sm);
+  text-align: center;
+}
+
+.cp__foot {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 12px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-size: var(--size-xs);
+}
+
+.cp__foot kbd { margin: 0 2px; }

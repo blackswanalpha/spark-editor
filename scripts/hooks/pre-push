@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Reference copy of the pre-push hook — installed by scripts/install-hooks.sh
+# See .git/hooks/pre-push after install
+set -e
+echo "▶ pre-push: typecheck + test (bypass with --no-verify)…"
+if command -v npm >/dev/null 2>&1 && [[ -f "package.json" ]]; then
+  npm run typecheck --silent || { echo "✖ typecheck failed"; exit 1; }
+  npm run test --silent || { echo "✖ tests failed"; exit 1; }
+  echo "✓ pre-push checks passed"
+fi

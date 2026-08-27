@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vscode/*
+.idea
+.DS_Store
+src-tauri/target
+src-tauri/gen
+*.log
+tsconfig.tsbuildinfo
+coverage
+.nyc_output

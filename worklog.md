@@ -1,0 +1,55 @@
+# sparkEditor — Worklog
+
+Chronological build log. Each entry is dated, scoped, and linked to the Changelog where the change was released. Times are EAT (UTC+3).
+
+---
+
+## 2026-08-27 — Documentation pass (README / explanation / description / changelog scaffolding)
+
+- **Scope:** `README.md`, `explanation.md`, `description.md`, `worklog.md`, `changelog/` — `sparkEditor-main/` package.
+- **What:** Authored the five artefacts requested for the sparkEditor product surface. `README.md` covers quick-start, architecture sketch, scripts, project structure, and docs map. `explanation.md` (this package) distils why the renderer/host split, the IR, and the file-as-truth tenet exist, with trade-offs and seams. `description.md` is the 300-char store listing (validated to 300 chars). `changelog/` seeded with Keep-a-Changelog `CHANGELOG.md` at `0.1.0`.
+- **Files:** `sparkEditor-main/README.md:1`, `sparkEditor-main/explanation.md:1`, `sparkEditor-main/description.md:1`, `sparkEditor-main/changelog/CHANGELOG.md:1`.
+- **Notes:** Docs stay consistent with `docs/explanation/{overview,architecture,data-model}.md` and `src/ir/types.ts:14`, `src/bridge/commands.ts:13`, `src/store/documents.ts:50`. Description string length asserted with `python3 -c "len(open(...).read().strip()) == 300"`.
+
+## 2026-08-27 — Renderer shell and document store
+
+- **Scope:** `src/App.tsx`, `src/store/documents.ts`, `src/commands/registry.ts`, `src/bridge/commands.ts`.
+- **What:** Wired `App.tsx:40` — `ThemeProvider`, `ToastProvider`, `SplashScreen`, custom `TitleBar` (OS decorations off), `Tabs`, `SideBar`, `StatusBar`, `CommandPalette`. Central command table in `registry.ts:9` consumed by palette, title-bar menu mirror, and keybinding dispatch. Zustand + Immer store (`documents.ts:50`) holds `docs/order/active/history`, per-doc `past/future` capped at 100 snapshots, `setRaw`/`setIr`/`undo`/`redo`, cursor and dirty flag. Bridge (`commands.ts:13`) wraps `invoke()` with browser-only `MEMORY_FS` fallback for Vite-only dev.
+- **Decisions:** Store lives in renderer (fast synchronous undo/mode switch); host only sees bytes on save/load. See `explanation.md:5`.
+- **Verification:** `npm run typecheck`, `npm run dev` in browser (mock FS), manual `readFile("/welcome.md")` smoke test.
+
+## 2026-08-26 — Editor surfaces
+
+- **Scope:** `src/editor/CodeEditor`, `src/editor/MarkdownEditor`, `src/editor/RichEditor`, `src/editor/editor.css`.
+- **What:** Code surface on CodeMirror 6 with `lineNumbers`, `highlightActiveLine`, `bracketMatching`, `history`, `searchKeymap`, language compartment (`extLangFor`), Shiki-bridged `HighlightStyle` via `highlightBridge.ts:10`, and beam `EditorView.updateListener` → `store.setRaw` + cursor sync. Markdown surface adds markdown language, toolbar (H1–H3, bold/italic/link/lists/blockquote/code), `Compartment` for theme, and live preview via `renderMd.ts` (self-contained md→html). Rich surface on Tiptap StarterKit + lowlight. All three read/write the shared IR (`src/ir/types.ts:14`).
+- **Open items:** File-watcher `file:changed` event wiring; Rich slash/floating menus (referenced in `designlabs`).
+
+## 2026-08-26 — Theming, motion, and UI primitives
+
+- **Scope:** `src/theme/`, `src/motion/`, `src/ui/`, `src/shell/`.
+- **What:** `ThemeProvider.tsx` — three themes (light/dark/system via `prefers-color-scheme`), CSS variables in `tokens.css`/`base.css`. `motion/index.ts` re-exports `framer-motion`. Primitives: `Button`, `Dialog`, `Dropdown`, `Icon`, `Input`, `Kbd`, `Loader`, `Popover`, `StatusBar`, `Tabs`, `Toast`. Shell: `TitleBar` (custom chrome, `decorations: false` in `tauri.conf.json:22`), `SideBar` (recents via `recentsGet/recentsAdd`), `CommandPalette` (Radix Dialog), `SplashScreen`. Framer `AnimatePresence` transitions for sidebar/status/editor.
+
+## 2026-08-25 — Tauri host
+
+- **Scope:** `src-tauri/src/lib.rs`, `src-tauri/src/main.rs`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`.
+- **What:** Host exposes `read_file`/`write_file`/`read_dir`/`stat` (`lib.rs:38`) with `HostError` enum (`NotFound`, `PermissionDenied`, `NotUtf8`, `AlreadyExists`, `InvalidPath`, `Internal`) serialized as `{ kind, data }`. Plugins: `dialog`, `fs`, `store`, `os`, `window-state`, `clipboard-manager`, `process`, `log`. Window config: 1280×800, `titleBarStyle: Overlay` (macOS), `hiddenTitle: true`, strict CSP (`default-src 'self'`). Cargo release profile (`Cargo.toml:32`): `lto = true`, `opt-level = "s"`, `panic = "abort"`.
+- **Notes:** `recents_*` / `app_state_*` commands staged for session restore; `notify` file-watch planned (self-write suppression).
+
+## 2026-08-25 — IR and project scaffolding
+
+- **Scope:** `src/ir/types.ts`, `src/ir/ids.ts`, `vite.config.ts`, `tsconfig.json`, `package.json`.
+- **What:** IR types (`Document: { version: 1, blocks: Block[] }`, `Block` variants, `Inline` marks) — stable `id` per node, regenerated on load so on-disk stays human-diffable. `vite.config.ts:9` path aliases (`@ui`, `@shell`, `@ir`, …), dev server 1420/strictPort, Tauri-aware HMR (1421). Dependencies pinned: CodeMirror 6.35, Tiptap 2.10, Zustand 4.5, Shiki 1.29, Radix UI, Phosphor Icons, Framer Motion.
+- **Decisions:** Versioned IR (`version: 1`) leaves room for migrators without persisting ids.
+
+## 2026-08-24 — Docs and design labs
+
+- **Scope:** `docs/` (Diátaxis), `designlabs/`.
+- **What:** `docs/explanation/{overview,architecture,data-model,process-model,state-and-persistence}` and `docs/reference/{host-commands,ir,renderer-modules,…}` authored. `designlabs/` — static, build-free HTML+CSS prototypes for all UI elements (app shell, titlebar, sidebar, explorer, palette, dialogs, toasts, markdown/rich/code editors), with local fonts (Inter, JetBrains Mono WOFF2) and SVG icons, `assets/manifest.json` + `tools/verify_assets.py` (XML parse, WOFF2 magic, SHA-256).
+
+---
+
+## Conventions
+
+- New entries go at the top (reverse-chronological). Keep each entry to: date, scope, what, decisions, verification/open items.
+- Link code with `path:line` (e.g., `src/ir/types.ts:14`) so the log stays navigable.
+- Promote user-visible changes to `changelog/CHANGELOG.md` under the next unreleased heading; cut a version heading on release.

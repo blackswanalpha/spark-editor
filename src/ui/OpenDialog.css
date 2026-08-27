@@ -1,0 +1,112 @@
+/* ============================================================
+   sparkEditor · src/ui/OpenDialog.css
+   Styling for the browser-only file/folder/save picker dialog.
+   ============================================================ */
+
+.opendialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 360px;
+}
+
+.opendialog__hint {
+  margin: 0;
+  font-size: var(--size-sm, 13px);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.opendialog__hint code {
+  font-family: var(--font-code, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  padding: 1px 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text);
+}
+
+.opendialog__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+
+.opendialog__empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--size-sm, 13px);
+}
+
+.opendialog__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.opendialog__row:hover,
+.opendialog__row:focus-visible {
+  background: var(--surface-3);
+  border-color: var(--border);
+  color: var(--text);
+  outline: none;
+}
+.opendialog__row:active {
+  background: var(--accent-soft);
+}
+
+.opendialog__row-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.opendialog__row:hover .opendialog__row-icon {
+  color: var(--accent);
+}
+
+.opendialog__row-name {
+  font-size: var(--size-sm, 13px);
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opendialog__row-path {
+  font-family: var(--font-code, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.opendialog__input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.opendialog__input-row > .input {
+  flex: 1 1 auto;
+}

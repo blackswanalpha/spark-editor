@@ -1,0 +1,47 @@
+.dialog__backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(2px);
+  z-index: var(--z-modal);
+}
+.dialog {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 520px);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  z-index: var(--z-modal);
+  overflow: hidden;
+}
+.dialog--sm { width: min(92vw, 380px); }
+.dialog--lg { width: min(92vw, 720px); }
+
+.dialog__head {
+  position: relative;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.dialog__title { font-size: var(--size-lg); font-weight: 600; color: var(--text); }
+.dialog__desc  { margin-top: 4px; color: var(--text-muted); font-size: var(--size-sm); }
+.dialog__close {
+  position: absolute; top: 8px; right: 8px;
+  width: 26px; height: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.dialog__close:hover { background: var(--surface-3); color: var(--text); }
+.dialog__body { padding: 14px 16px; overflow: auto; }
+.dialog__foot {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}

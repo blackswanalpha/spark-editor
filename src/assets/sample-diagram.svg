@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 160" fill="none" role="img" aria-label="Sample architecture diagram">
+  <rect x="1" y="1" width="418" height="158" rx="10" fill="var(--surface-2, #f6f7f9)" stroke="var(--border, #d5d9e0)"/>
+  <rect x="24" y="52" width="110" height="56" rx="8" fill="var(--accent-soft, #e3ecff)" stroke="var(--accent, #5b8def)"/>
+  <text x="79" y="84" text-anchor="middle" font-family="sans-serif" font-size="13" fill="var(--text, #24292f)">Renderer</text>
+  <rect x="286" y="52" width="110" height="56" rx="8" fill="var(--surface-1, #ffffff)" stroke="var(--border, #d5d9e0)"/>
+  <text x="341" y="84" text-anchor="middle" font-family="sans-serif" font-size="13" fill="var(--text, #24292f)">Tauri host</text>
+  <path d="M134 80 L286 80" stroke="var(--accent, #5b8def)" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M280 75 l8 5 -8 5" fill="none" stroke="var(--accent, #5b8def)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="210" y="70" text-anchor="middle" font-family="sans-serif" font-size="11" fill="var(--text-muted, #656d76)">IPC bridge</text>
+</svg>

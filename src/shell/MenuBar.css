@@ -1,0 +1,156 @@
+/* ============================================================
+   MenuBar — horizontal row of top-level menus below TitleBar.
+   Visual language mirrors TitleBar: surface-2 background,
+   border-bottom, size-sm typography, radius-sm controls.
+   ============================================================ */
+.menubar {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 6px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--size-sm);
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+  z-index: 25;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.menubar__list {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.menubar__top {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--size-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+}
+
+.menubar__top:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.menubar__top:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.menubar__top--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.menubar__top u {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.menubar__spacer { flex: 1 1 auto; }
+
+.menubar__dropdown {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: 0;
+  min-width: 240px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  padding: 4px;
+  z-index: 30;
+  list-style: none;
+  margin: 0;
+}
+
+.menubar__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--size-sm);
+  text-align: left;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.menubar__item:hover,
+.menubar__item--highlight {
+  background: var(--surface-3);
+}
+
+.menubar__item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.menubar__item[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.menubar__item[aria-disabled="true"]:hover {
+  background: transparent;
+}
+
+.menubar__item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.menubar__item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menubar__item-shortcut {
+  flex-shrink: 0;
+  margin-left: 16px;
+  color: var(--text-faint);
+  font-family: var(--font-code);
+  font-size: var(--size-xs);
+  letter-spacing: 0.02em;
+}
+
+.menubar__sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+  border: 0;
+  padding: 0;
+}

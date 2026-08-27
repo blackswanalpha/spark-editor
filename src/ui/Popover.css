@@ -1,0 +1,11 @@
+.popover {
+  z-index: var(--z-menu);
+  min-width: 220px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  padding: 6px;
+  color: var(--text);
+  transform-origin: var(--radix-popover-content-transform-origin);
+}

@@ -1,0 +1,48 @@
+.splash {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 20px;
+  background: var(--bg);
+  z-index: var(--z-splash);
+  overflow: hidden;
+}
+.splash__halo {
+  position: absolute; inset: -20% -20% auto -20%;
+  height: 60%;
+  background: radial-gradient(60% 60% at 50% 30%,
+    color-mix(in srgb, var(--accent) 25%, transparent) 0%,
+    transparent 70%);
+  filter: blur(30px);
+  pointer-events: none;
+}
+.splash__inner { text-align: center; position: relative; }
+.splash__mark  {
+  width: 56px; height: 56px;
+  display: block;
+  margin: 0 auto 10px;
+  filter: drop-shadow(0 8px 20px color-mix(in srgb, var(--accent) 35%, transparent));
+}
+.splash__name {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.splash__tag {
+  margin-top: 4px;
+  font-size: var(--size-sm);
+  color: var(--text-muted);
+  font-family: var(--font-code);
+}
+.splash__progress {
+  width: min(280px, 70vw);
+  position: relative;
+}
+.splash__stage {
+  font-size: var(--size-xs);
+  color: var(--text-faint);
+  font-family: var(--font-code);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  height: 1.2em;
+}

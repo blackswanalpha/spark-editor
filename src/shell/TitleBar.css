@@ -1,0 +1,146 @@
+/* ============================================================
+   Title bar — full custom chrome.
+   data-tauri-drag-region is what makes Tauri treat the area
+   as draggable for window movement.
+   ============================================================ */
+.titlebar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;        /* critical: minmax(0, 1fr) lets the left track shrink */
+  grid-area: titlebar;
+  align-items: center;
+  height: 32px;
+  padding: 0 6px 0 8px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  -webkit-user-select: none;
+  color: var(--text);
+  font-size: var(--size-sm);
+  position: relative;
+  z-index: 200;
+  min-width: 0;                                       /* belt-and-braces: let the titlebar itself shrink */
+  overflow: hidden;                                   /* hard-clip anything that bleeds past the bar's edge */
+}
+
+.titlebar__left,
+.titlebar__right { display: flex; align-items: center; gap: 6px; }
+.titlebar__left  { min-width: 0; overflow: hidden; }  /* let the left cell shrink and clip its content */
+.titlebar__right { min-width: 0; flex-shrink: 0; justify-content: flex-end; } /* keep controls at natural size */
+
+.titlebar__mark { width: 16px; height: 16px; display: block; flex-shrink: 0; }
+.titlebar__title {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-weight: 500;
+  color: var(--text);
+  max-width: 36ch;
+  min-width: 0;                                       /* critical: allow the title to shrink so ellipsis triggers */
+  flex: 1 1 auto;                                     /* take remaining space, shrink when needed */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.titlebar__dot { color: var(--accent); font-size: 16px; line-height: 1; flex-shrink: 0; }
+.titlebar__brand {
+  margin-left: 4px;
+  color: var(--text-faint);
+  font-family: var(--font-code);
+  font-size: var(--size-xs);
+  flex-shrink: 0;                                     /* never squish the brand — title truncates first */
+  white-space: nowrap;
+}
+
+.titlebar__mac-spacer { width: 64px; flex-shrink: 0; } /* leaves room for macOS traffic lights */
+
+.titlebar__iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;                                     /* never squish the window control buttons */
+}
+.titlebar__iconbtn:hover { background: var(--surface-3); color: var(--text); }
+.titlebar__iconbtn--close:hover { background: var(--danger); color: var(--on-accent); }
+
+/* macOS: traffic lights go on the left; we don't draw them — Tauri
+   can place them when decorations are off, or we hide via config. */
+.titlebar--macos { padding-left: 0; }
+
+/* ----- Theme picker: 2x2 swatch grid + bubble menu ----- */
+
+.titlebar__swatches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.titlebar__swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 1px;
+  box-sizing: border-box;
+}
+
+.titlebar__swatch--light  { background: #2f6bde; } /* blue */
+.titlebar__swatch--dark   { background: #f5c518; } /* yellow */
+.titlebar__swatch--navy   { background: #000000; } /* black */
+.titlebar__swatch--system {
+  background: linear-gradient(135deg, #2f6bde 50%, #e53935 50%); /* blue + red */
+}
+
+.titlebar__swatch--active {
+  box-shadow: 0 0 0 1.5px var(--accent);
+  border-radius: 1px;
+}
+
+.titlebar__theme-menu {
+  min-width: 160px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.titlebar__theme-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--size-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.titlebar__theme-item:hover {
+  background: var(--surface-3);
+}
+
+.titlebar__theme-item--active {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.titlebar__theme-item__chip {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.titlebar__theme-item__label {
+  flex: 1 1 auto;
+  min-width: 0;
+}

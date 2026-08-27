@@ -1,0 +1,67 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  min-width: 200px;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+.sidebar__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.sidebar__tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--size-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  background: transparent;
+}
+.sidebar__tab:hover { color: var(--text); background: var(--surface-3); }
+.sidebar__tab.is-active { color: var(--text); background: var(--surface-3); }
+
+.sidebar__body { flex: 1; overflow: auto; padding: 4px 0; }
+.sidebar__list { list-style: none; padding: 0; margin: 0; }
+.sidebar__empty { padding: 12px; color: var(--text-faint); font-size: var(--size-sm); }
+.sidebar__entry {
+  display: flex; flex-direction: column; align-items: flex-start;
+  width: 100%;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  border-radius: 0;
+}
+.sidebar__entry:hover { background: var(--surface-3); }
+.sidebar__entry.is-active { background: var(--accent-soft); color: var(--text); }
+.sidebar__entry-name { font-size: var(--size-sm); }
+.sidebar__entry-path { font-size: var(--size-xs); color: var(--text-faint); font-family: var(--font-code); }
+
+.tree { list-style: none; padding: 0; margin: 0; }
+.tree__row {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%;
+  height: 24px;
+  padding-right: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: var(--size-sm);
+  text-align: left;
+  border-radius: 0;
+}
+.tree__row:hover { background: var(--surface-3); }
+.tree__row.is-active { background: var(--accent-soft); }
+.tree__chev { transition: transform var(--t-fast) var(--ease); color: var(--text-faint); }
+.tree__chev.is-open { transform: rotate(90deg); }
+.tree__icon { color: var(--text-muted); display: inline-flex; }
+.tree__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
