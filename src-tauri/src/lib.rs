@@ -22,7 +22,9 @@ pub enum HostError {
 
 impl From<std::io::Error> for HostError {
     fn from(e: std::io::Error) -> Self {
-        HostError::Internal { message: e.to_string() }
+        HostError::Internal {
+            message: e.to_string(),
+        }
     }
 }
 
@@ -41,7 +43,9 @@ fn read_file(path: String) -> Result<String, HostError> {
         std::io::ErrorKind::NotFound => HostError::NotFound { path: path.clone() },
         std::io::ErrorKind::PermissionDenied => HostError::PermissionDenied { path: path.clone() },
         std::io::ErrorKind::InvalidData => HostError::NotUtf8 { path: path.clone() },
-        _ => HostError::Internal { message: e.to_string() },
+        _ => HostError::Internal {
+            message: e.to_string(),
+        },
     })
 }
 
@@ -49,7 +53,8 @@ fn read_file(path: String) -> Result<String, HostError> {
 fn write_file(path: String, contents: String) -> Result<WriteReceipt, HostError> {
     std::fs::write(&path, &contents)?;
     let meta = std::fs::metadata(&path)?;
-    let mtime = meta.modified()
+    let mtime = meta
+        .modified()
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| {
@@ -78,7 +83,7 @@ fn read_dir(path: String) -> Result<Vec<DirEntry>, HostError> {
         out.push(DirEntry {
             name: entry.file_name().to_string_lossy().to_string(),
             is_file: meta.as_ref().map(|m| m.is_file()).unwrap_or(false),
-            is_dir:  meta.as_ref().map(|m| m.is_dir()).unwrap_or(false),
+            is_dir: meta.as_ref().map(|m| m.is_dir()).unwrap_or(false),
         });
     }
     out.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
@@ -100,9 +105,14 @@ fn stat(path: String) -> Result<FileStat, HostError> {
         is_file: meta.is_file(),
         is_dir: meta.is_dir(),
         size: meta.len(),
-        mtime: meta.modified().ok()
+        mtime: meta
+            .modified()
+            .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .and_then(|d| chrono::DateTime::<chrono::Utc>::from_timestamp(d.as_secs() as i64, 0).map(|dt| dt.to_rfc3339()))
+            .and_then(|d| {
+                chrono::DateTime::<chrono::Utc>::from_timestamp(d.as_secs() as i64, 0)
+                    .map(|dt| dt.to_rfc3339())
+            })
             .unwrap_or_default(),
     })
 }
@@ -114,6 +124,64 @@ pub struct FileStat {
     pub is_dir: bool,
     pub size: u64,
     pub mtime: String,
+}
+
+#[tauri::command]
+fn create_file(path: String, contents: Option<String>) -> Result<FileStat, HostError> {
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => HostError::AlreadyExists { path: path.clone() },
+            std::io::ErrorKind::NotFound => HostError::NotFound { path: path.clone() },
+            std::io::ErrorKind::PermissionDenied => {
+                HostError::PermissionDenied { path: path.clone() }
+            }
+            std::io::ErrorKind::IsADirectory => HostError::IsADirectory { path: path.clone() },
+            _ => HostError::Internal {
+                message: e.to_string(),
+            },
+        })?;
+    if let Some(contents) = contents.as_deref() {
+        std::io::Write::write_all(&mut &file, contents.as_bytes()).map_err(|e| {
+            HostError::Internal {
+                message: e.to_string(),
+            }
+        })?;
+    }
+    drop(file);
+    let meta = std::fs::metadata(&path)?;
+    Ok(FileStat {
+        path,
+        is_file: meta.is_file(),
+        is_dir: meta.is_dir(),
+        size: meta.len(),
+        mtime: meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .and_then(|d| {
+                chrono::DateTime::<chrono::Utc>::from_timestamp(d.as_secs() as i64, 0)
+                    .map(|dt| dt.to_rfc3339())
+            })
+            .unwrap_or_default(),
+    })
+}
+
+#[tauri::command]
+fn mkdir(path: String) -> Result<(), HostError> {
+    match std::fs::create_dir_all(&path) {
+        Ok(()) => Ok(()),
+        Err(e) => match e.kind() {
+            std::io::ErrorKind::PermissionDenied => {
+                Err(HostError::PermissionDenied { path: path.clone() })
+            }
+            _ => Err(HostError::Internal {
+                message: e.to_string(),
+            }),
+        },
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -128,7 +196,12 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_log::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
-            read_file, write_file, read_dir, stat,
+            read_file,
+            write_file,
+            read_dir,
+            stat,
+            create_file,
+            mkdir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

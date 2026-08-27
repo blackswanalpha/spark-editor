@@ -25,6 +25,7 @@ import { SplashScreen } from "@shell/SplashScreen";
 import { ThemeProvider, useTheme } from "@theme/ThemeProvider";
 import { ToastProvider, useToast } from "@ui/Toast";
 import { useDocs } from "@store/documents";
+import { useExplorer } from "@store/explorer";
 import { readFile, recentsAdd, recentsGet, isTauri } from "@bridge/commands";
 import { buildCommands, bindPalette, type CommandSpec } from "@commands/registry";
 import { Button } from "@ui/Button";
@@ -114,7 +115,42 @@ function Shell() {
     };
   }, []);
 
+  // Subscribe the explorer to host file:changed events once.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    useExplorer.getState().subscribeToFileChanges().then((fn) => {
+      if (cancelled) { fn(); } else { unlisten = fn; }
+    });
+    return () => { cancelled = true; unlisten?.(); };
+  }, []);
+
+  // Keep the explorer in sync with explicit folder-open commands.
+  useEffect(() => {
+    const onFolderOpen = (e: Event) => {
+      const path = (e as CustomEvent<{ path: string }>).detail?.path;
+      if (path) void useExplorer.getState().setRoot(path);
+    };
+    window.addEventListener("spark:folder:open", onFolderOpen);
+    return () => window.removeEventListener("spark:folder:open", onFolderOpen);
+  }, []);
+
   const activeDoc = active ? docs[active] : null;
+
+  // Derive the explorer root: explicit folder-open first; fall back to the
+  // active document's parent directory when no folder is open yet.
+  const explorerRoot = useExplorer((s) => s.root);
+  const rootFromDocOnce = useRef(false);
+  useEffect(() => {
+    if (explorerRoot) { rootFromDocOnce.current = true; return; }
+    if (rootFromDocOnce.current) return;
+    const path = activeDoc?.path;
+    if (!path) return;
+    const parent = path.split("/").slice(0, -1).join("/") || "/";
+    rootFromDocOnce.current = true;
+    void useExplorer.getState().setRoot(parent);
+  }, [explorerRoot, activeDoc?.path]);
+
   const tabList = order.map((id) => {
     const d = docs[id];
     return {
@@ -156,6 +192,11 @@ function Shell() {
                 }
               }}
               activePath={activeDoc?.path || undefined}
+              onRequestOpenFolder={() => {
+                window.dispatchEvent(new CustomEvent("spark:command", { detail: { id: "file.openFolder" } }));
+              }}
+              onInfo={(msg) => toast.info(msg)}
+              onError={(title, detail) => toast.error(title, detail)}
             />
           </motion.aside>
         )}
