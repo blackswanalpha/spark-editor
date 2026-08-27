@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "@motion/index";
 import { TitleBar } from "@shell/TitleBar";
+import { MenuBar } from "@shell/MenuBar";
 import { SideBar } from "@shell/SideBar";
 import { Tabs } from "@ui/Tabs";
 import { StatusBar } from "@ui/StatusBar";
@@ -146,6 +147,8 @@ function Shell() {
         dirty={activeDoc?.dirty}
         platform={isTauri ? (navigator.userAgent.includes("Mac") ? "macos" : "windows") : "windows"}
       />
+
+      <MenuBar commands={commandsRef.current} hasActiveDoc={!!activeDoc} />
 
       <AnimatePresence>
         {showSidebar && order.length > 0 && (

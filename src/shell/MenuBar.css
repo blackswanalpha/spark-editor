@@ -31,6 +31,12 @@
   min-width: 0;
 }
 
+.menubar__cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
 .menubar__top {
   display: inline-flex;
   align-items: center;

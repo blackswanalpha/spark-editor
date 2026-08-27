@@ -23,7 +23,6 @@ import {
   Compartment,
   StateCommand,
   EditorSelection,
-  type ChangeSpec,
   type Extension,
 } from "@codemirror/state";
 import {
@@ -59,24 +58,12 @@ import { tagExtension } from "./highlightBridge";
 import { useDocs } from "@store/documents";
 import { useTheme } from "@theme/ThemeProvider";
 import { Button } from "@ui/Button";
-import { Icon } from "@ui/Icon";
 import "../editor.css";
 import "./CodeEditor.css";
 
 /* ----------------------------------------------------------------
    Language detection: extension + content heuristics
    ---------------------------------------------------------------- */
-
-type LangId =
-  | "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs"
-  | "json" | "html" | "htm"
-  | "css" | "scss"
-  | "md" | "markdown"
-  | "py"
-  | "rs"
-  | "go"
-  | "yml" | "yaml"
-  | "sql";
 
 type LangFactory = () => Extension;
 
@@ -140,7 +127,7 @@ function detectLangFromExt(name: string): string | undefined {
 function detectLangFromContent(text: string): string | undefined {
   const head = text.slice(0, 2048);
   if (/<!doctype\s+html|<html[\s>]/i.test(head)) return "html";
-  if (/^\s*\{[\s\S]*"[^"]+"\s*:/m.test(head) && /[\}\]]\s*$/.test(head)) return "json";
+  if (/^\s*\{[\s\S]*"[^"]+"\s*:/m.test(head) && /[\]}]\s*$/.test(head)) return "json";
   if (/^\s*package\s+main\b/m.test(head)) return "go";
   if (/^\s*fn\s+main\s*\(/m.test(head)) return "rs";
   if (/^\s*def\s+\w+\s*\([^)]*\)\s*:/m.test(head)) return "py";
@@ -251,10 +238,6 @@ export function CodeEditor({ docId, onCursor }: Props) {
 
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoValue, setGotoValue] = useState("");
-  const [wrapOn, setWrapOn] = useState<boolean>(() => {
-    const v = wordWrapByDoc.get(docId);
-    return typeof v === "boolean" ? v : true;
-  });
 
   // Remember the current language so the fallback comment-toggle
   // command can pick the right prefix.
@@ -356,13 +339,10 @@ export function CodeEditor({ docId, onCursor }: Props) {
 
   const submitGoTo = useCallback(() => {
     const n = parseInt(gotoValue, 10);
-    if (Number.isFinite(n) && n > 0) {
-      const v = viewRef.current;
-      v?.focus();
-      goToLineCmd(n)({
-        state: v!.state,
-        dispatch: v!.dispatch.bind(v!),
-      } as never);
+    const v = viewRef.current;
+    if (Number.isFinite(n) && n > 0 && v) {
+      v.focus();
+      goToLineCmd(n)({ state: v.state, dispatch: v.dispatch.bind(v) });
     }
     setGotoOpen(false);
     setGotoValue("");
@@ -378,7 +358,7 @@ export function CodeEditor({ docId, onCursor }: Props) {
     const v = viewRef.current;
     if (!v) return;
     v.focus();
-    lineCommentCmd({ state: v.state, dispatch: v.dispatch.bind(v) } as never);
+    lineCommentCmd({ state: v.state, dispatch: v.dispatch.bind(v) });
   }, []);
 
   const toggleWrapAction = useCallback(() => {
@@ -387,7 +367,6 @@ export function CodeEditor({ docId, onCursor }: Props) {
     const cur = wordWrapByDoc.get(docId);
     const next = typeof cur === "boolean" ? !cur : false;
     wordWrapByDoc.set(docId, next);
-    setWrapOn(next);
     v.dispatch({
       effects: wrapComp.reconfigure(next ? EditorView.lineWrapping : []),
     });
