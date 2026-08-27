@@ -48,3 +48,10 @@
 .empty__sub { color: var(--text-muted); }
 .empty__actions { display: flex; gap: 8px; margin-top: 8px; }
 .empty__hint  { color: var(--text-faint); font-size: var(--size-xs); margin-top: 8px; }
+
+.empty__palette-link {
+  margin-top: 4px;
+  font-size: var(--size-xs);
+  color: var(--text-faint);
+}
+.empty__palette-link:hover { color: var(--text-muted); }

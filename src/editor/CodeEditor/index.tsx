@@ -23,6 +23,7 @@ import {
   Compartment,
   StateCommand,
   EditorSelection,
+  type ChangeSpec,
   type Extension,
 } from "@codemirror/state";
 import {
@@ -44,109 +45,21 @@ import {
 } from "@codemirror/language";
 import { autocompletion } from "@codemirror/autocomplete";
 import { lintGutter } from "@codemirror/lint";
-import { markdown as mdLang } from "@codemirror/lang-markdown";
-import { javascript as jsLang } from "@codemirror/lang-javascript";
-import { python as pyLang } from "@codemirror/lang-python";
-import { html as htmlLang } from "@codemirror/lang-html";
-import { css as cssLang } from "@codemirror/lang-css";
-import { json as jsonLang } from "@codemirror/lang-json";
-import { rust as rustLang } from "@codemirror/lang-rust";
-import { go as goLang } from "@codemirror/lang-go";
-import { yaml as yamlLang } from "@codemirror/lang-yaml";
-import { sql as sqlLang } from "@codemirror/lang-sql";
 import { tagExtension } from "./highlightBridge";
+import {
+  LANG_LOADERS,
+  LANG_LABELS,
+  LANG_COMMENT,
+  detectLangFromExt,
+  detectLangFromContent,
+  langFor,
+  langIdOf,
+} from "./languages";
 import { useDocs } from "@store/documents";
 import { useTheme } from "@theme/ThemeProvider";
 import { Button } from "@ui/Button";
 import "../editor.css";
 import "./CodeEditor.css";
-
-/* ----------------------------------------------------------------
-   Language detection: extension + content heuristics
-   ---------------------------------------------------------------- */
-
-type LangFactory = () => Extension;
-
-const LANG_LOADERS: Record<string, LangFactory> = {
-  ts:  () => jsLang({ jsx: false, typescript: true }),
-  tsx: () => jsLang({ jsx: true,  typescript: true }),
-  js:  () => jsLang({ jsx: false, typescript: false }),
-  jsx: () => jsLang({ jsx: true,  typescript: false }),
-  mjs: () => jsLang({ jsx: false, typescript: false }),
-  cjs: () => jsLang({ jsx: false, typescript: false }),
-  json:    () => jsonLang(),
-  html:    () => htmlLang(),
-  htm:     () => htmlLang(),
-  css:     () => cssLang(),
-  scss:    () => cssLang(),
-  md:      () => mdLang(),
-  markdown:() => mdLang(),
-  py:      () => pyLang(),
-  rs:      () => rustLang(),
-  go:      () => goLang(),
-  yml:     () => yamlLang(),
-  yaml:    () => yamlLang(),
-  sql:     () => sqlLang(),
-};
-
-const LANG_LABELS: Record<string, string> = {
-  ts: "TypeScript",
-  tsx: "TypeScript JSX",
-  js: "JavaScript",
-  jsx: "JavaScript JSX",
-  mjs: "JavaScript (ESM)",
-  cjs: "JavaScript (CJS)",
-  json: "JSON",
-  html: "HTML",
-  htm: "HTML",
-  css: "CSS",
-  scss: "SCSS",
-  md: "Markdown",
-  markdown: "Markdown",
-  py: "Python",
-  rs: "Rust",
-  go: "Go",
-  yml: "YAML",
-  yaml: "YAML",
-  sql: "SQL",
-};
-
-/** Comment prefix per language id. */
-const COMMENT_PREFIX: Record<string, string> = {
-  py: "# ",
-  sql: "-- ",
-};
-
-function detectLangFromExt(name: string): string | undefined {
-  const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
-  if (!m) return undefined;
-  const ext = m[1];
-  return LANG_LOADERS[ext] ? ext : undefined;
-}
-
-function detectLangFromContent(text: string): string | undefined {
-  const head = text.slice(0, 2048);
-  if (/<!doctype\s+html|<html[\s>]/i.test(head)) return "html";
-  if (/^\s*\{[\s\S]*"[^"]+"\s*:/m.test(head) && /[\]}]\s*$/.test(head)) return "json";
-  if (/^\s*package\s+main\b/m.test(head)) return "go";
-  if (/^\s*fn\s+main\s*\(/m.test(head)) return "rs";
-  if (/^\s*def\s+\w+\s*\([^)]*\)\s*:/m.test(head)) return "py";
-  if (/^\s*(import\s+.*from\s+|export\s+(default\s+)?(?:const|function|class)\s+|const\s+\w+\s*[:=])/m.test(head)) return "js";
-  if (/^\s*---\s*$/m.test(head) && /^\s*\w+:\s+/m.test(head)) return "yaml";
-  if (/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\b/im.test(head)) return "sql";
-  return undefined;
-}
-
-function langFor(name: string, explicitLang?: string, content?: string): Extension {
-  const id = (explicitLang || detectLangFromExt(name) || (content ? detectLangFromContent(content) : undefined) || "").toLowerCase();
-  const factory = LANG_LOADERS[id];
-  return factory ? factory() : [];
-}
-
-function langIdOf(name: string, explicitLang?: string, content?: string): string | undefined {
-  const id = (explicitLang || detectLangFromExt(name) || (content ? detectLangFromContent(content) : undefined) || "").toLowerCase();
-  return id || undefined;
-}
 
 /* ----------------------------------------------------------------
    Per-doc word-wrap preference (module-level ref)
@@ -169,7 +82,7 @@ const lineCommentCmd: StateCommand = ({ state, dispatch }) => {
 
   const lang = wordWrapByDoc.get("__lang__");
   const langId = typeof lang === "string" ? lang : "js";
-  const prefix = COMMENT_PREFIX[langId] || "// ";
+  const prefix = LANG_COMMENT[langId] || "// ";
   const sel = state.selection.main;
   const fromLine = state.doc.lineAt(sel.from);
   const toLine = state.doc.lineAt(sel.to);
@@ -339,10 +252,13 @@ export function CodeEditor({ docId, onCursor }: Props) {
 
   const submitGoTo = useCallback(() => {
     const n = parseInt(gotoValue, 10);
-    const v = viewRef.current;
-    if (Number.isFinite(n) && n > 0 && v) {
-      v.focus();
-      goToLineCmd(n)({ state: v.state, dispatch: v.dispatch.bind(v) });
+    if (Number.isFinite(n) && n > 0) {
+      const v = viewRef.current;
+      v?.focus();
+      goToLineCmd(n)({
+        state: v!.state,
+        dispatch: v!.dispatch.bind(v!),
+      } as never);
     }
     setGotoOpen(false);
     setGotoValue("");
@@ -358,7 +274,7 @@ export function CodeEditor({ docId, onCursor }: Props) {
     const v = viewRef.current;
     if (!v) return;
     v.focus();
-    lineCommentCmd({ state: v.state, dispatch: v.dispatch.bind(v) });
+    lineCommentCmd({ state: v.state, dispatch: v.dispatch.bind(v) } as never);
   }, []);
 
   const toggleWrapAction = useCallback(() => {
@@ -471,11 +387,4 @@ export function CodeEditor({ docId, onCursor }: Props) {
       </div>
     </div>
   );
-}
-
-/* ----------------------------------------------------------------
-   Public helper: re-exported for the file tree.
-   ---------------------------------------------------------------- */
-export function guessLang(name: string): string {
-  return langIdOf(name) ?? "";
 }

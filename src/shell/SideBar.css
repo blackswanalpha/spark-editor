@@ -1,3 +1,10 @@
+/* ============================================================
+   sparkEditor · src/shell/SideBar.css
+   Tabs (Explorer / Recents) + folder tree.
+   Class names mirror designlabs/assets/css/surfaces.css so the
+   lab prototype and the live component stay visually identical.
+   ============================================================ */
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -6,7 +13,9 @@
   background: var(--surface-2);
   border-right: 1px solid var(--border);
   overflow: hidden;
+  min-height: 0;
 }
+
 .sidebar__tabs {
   display: flex;
   align-items: center;
@@ -24,13 +33,15 @@
   color: var(--text-muted);
   cursor: pointer;
   background: transparent;
+  border: none;
 }
 .sidebar__tab:hover { color: var(--text); background: var(--surface-3); }
 .sidebar__tab.is-active { color: var(--text); background: var(--surface-3); }
 
-.sidebar__body { flex: 1; overflow: auto; padding: 4px 0; }
+.sidebar__body { flex: 1; overflow: auto; padding: 0; min-height: 0; }
 .sidebar__list { list-style: none; padding: 0; margin: 0; }
 .sidebar__empty { padding: 12px; color: var(--text-faint); font-size: var(--size-sm); }
+
 .sidebar__entry {
   display: flex; flex-direction: column; align-items: flex-start;
   width: 100%;
@@ -39,6 +50,7 @@
   text-align: left;
   background: transparent;
   color: var(--text);
+  border: none;
   border-radius: 0;
 }
 .sidebar__entry:hover { background: var(--surface-3); }
@@ -46,22 +58,120 @@
 .sidebar__entry-name { font-size: var(--size-sm); }
 .sidebar__entry-path { font-size: var(--size-xs); color: var(--text-faint); font-family: var(--font-code); }
 
-.tree { list-style: none; padding: 0; margin: 0; }
-.tree__row {
-  display: flex; align-items: center; gap: 6px;
+.sidebar__open-btn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: var(--size-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text);
+  cursor: pointer;
+}
+.sidebar__open-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+.explorer-empty {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center;
+  padding: 24px 12px;
+  color: var(--text-muted);
+}
+
+/* ---------- Explorer pane ---------- */
+.explorer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  font-size: var(--size-sm);
+}
+.explorer__header {
+  display: flex; align-items: center; gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-2) var(--sp-1);
+  font-size: var(--size-xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  user-select: none;
+}
+.explorer__title {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 50%;
+}
+.explorer__actions { margin-left: auto; display: flex; gap: 2px; }
+.explorer__actions .icon-btn { width: 22px; height: 22px; }
+
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--surface-3); color: var(--text); }
+.icon-btn.is-on { color: var(--accent); background: var(--accent-soft); }
+.icon-btn:focus-visible { box-shadow: var(--focus-ring); }
+
+.explorer__tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--sp-1) var(--sp-2);
+  outline: none;
+}
+.explorer__tree:focus-visible { box-shadow: inset var(--focus-ring); border-radius: var(--radius-sm); }
+
+.tree-root {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-2) var(--sp-1);
+  font-size: var(--size-sm);
+  font-weight: 600;
+  color: var(--text);
+  user-select: none;
+  border-radius: var(--radius-sm);
+}
+.tree-root[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.tree-root:focus-visible { box-shadow: var(--focus-ring); }
+.tree-root__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tree-item {
+  display: flex; align-items: center; gap: var(--sp-1);
   width: 100%;
-  height: 24px;
-  padding-right: 8px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  font-size: var(--size-sm);
   text-align: left;
-  border-radius: 0;
+  font-size: var(--size-sm);
+  font-family: inherit;
 }
-.tree__row:hover { background: var(--surface-3); }
-.tree__row.is-active { background: var(--accent-soft); }
-.tree__chev { transition: transform var(--t-fast) var(--ease); color: var(--text-faint); }
-.tree__chev.is-open { transform: rotate(90deg); }
-.tree__icon { color: var(--text-muted); display: inline-flex; }
-.tree__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-item:hover { background: var(--surface-3); }
+.tree-item[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.tree-item.is-active { background: var(--accent-soft); }
+.tree-item:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+.tree-item__icon { width: 15px; height: 15px; color: var(--text-muted); flex: none; display: inline-flex; }
+.tree-item[aria-selected="true"] .tree-item__icon { color: var(--accent); }
+.tree-item__chev {
+  width: 14px; height: 14px; flex: none;
+  color: var(--text-faint);
+  transition: transform var(--t-fast) var(--ease);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tree-item[data-dir="true"][aria-expanded="true"] .tree-item__chev { transform: rotate(90deg); }
+.tree-item[data-dir="false"] .tree-item__chev { visibility: hidden; }
+.tree-item__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-item--hidden .tree-item__name { color: var(--text-muted); font-style: italic; }
+
+.tree-group[hidden] { display: none; }
+.tree-empty { padding: var(--sp-2); color: var(--text-muted); font-size: var(--size-sm); }
+
+.loader-row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2);
+  color: var(--text-muted);
+  font-size: var(--size-sm);
+}

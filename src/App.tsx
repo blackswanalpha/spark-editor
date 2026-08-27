@@ -26,6 +26,7 @@ import { SplashScreen } from "@shell/SplashScreen";
 import { ThemeProvider, useTheme } from "@theme/ThemeProvider";
 import { ToastProvider, useToast } from "@ui/Toast";
 import { useDocs } from "@store/documents";
+import { useExplorer } from "@store/explorer";
 import { readFile, recentsAdd, recentsGet, isTauri } from "@bridge/commands";
 import { buildCommands, bindPalette, type CommandSpec, currentRoot, setCurrentRoot } from "@commands/registry";
 import { Button } from "@ui/Button";
@@ -116,19 +117,46 @@ function Shell() {
     };
   }, []);
 
-  // Folder open
+  // Subscribe the explorer to host file:changed events once.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    useExplorer.getState().subscribeToFileChanges().then((fn) => {
+      if (cancelled) { fn(); } else { unlisten = fn; }
+    });
+    return () => { cancelled = true; unlisten?.(); };
+  }, []);
+
+  // Folder open: keep local root, the registry's `currentRoot`, and the
+  // explorer store all in sync so the three readers see the same value.
   useEffect(() => {
     const onFolderOpen = (e: Event) => {
-      const ev = e as CustomEvent<{ path: string }>;
-      if (!ev.detail?.path) return;
-      setRoot(ev.detail.path);
-      setCurrentRoot(ev.detail.path);
+      const path = (e as CustomEvent<{ path: string }>).detail?.path;
+      if (!path) return;
+      setRoot(path);
+      setCurrentRoot(path);
+      void useExplorer.getState().setRoot(path);
     };
     window.addEventListener("spark:folder:open", onFolderOpen);
     return () => window.removeEventListener("spark:folder:open", onFolderOpen);
   }, []);
 
   const activeDoc = active ? docs[active] : null;
+
+  // Derive the explorer root: explicit folder-open first; fall back to the
+  // active document's parent directory when no folder is open yet.
+  const explorerRoot = useExplorer((s) => s.root);
+  const rootFromDocOnce = useRef(false);
+  useEffect(() => {
+    if (explorerRoot) { rootFromDocOnce.current = true; return; }
+    if (rootFromDocOnce.current) return;
+    const path = activeDoc?.path;
+    if (!path) return;
+    const parent = path.split("/").slice(0, -1).join("/") || "/";
+    rootFromDocOnce.current = true;
+    void useExplorer.getState().setRoot(parent);
+  }, [explorerRoot, activeDoc?.path]);
+
   const tabList = order.map((id) => {
     const d = docs[id];
     return {
@@ -172,6 +200,11 @@ function Shell() {
                 }
               }}
               activePath={activeDoc?.path || undefined}
+              onRequestOpenFolder={() => {
+                window.dispatchEvent(new CustomEvent("spark:command", { detail: { id: "file.openFolder" } }));
+              }}
+              onInfo={(msg) => toast.info(msg)}
+              onError={(title, detail) => toast.error(title, detail)}
             />
           </motion.aside>
         )}
@@ -207,7 +240,12 @@ function Shell() {
             </div>
           </>
         ) : (
-          <EmptyState onCreate={() => commandsRef.current.find(c => c.id === "file.new")?.run()} />
+          <EmptyState
+          onCreate={() => commandsRef.current.find(c => c.id === "file.new")?.run()}
+          onOpenFolder={() => commandsRef.current.find(c => c.id === "file.openFolder")?.run()}
+          onOpenFile={() => commandsRef.current.find(c => c.id === "file.open")?.run()}
+          onPalette={() => commandsRef.current.find(c => c.id === "view.commandPalette")?.run()}
+        />
         )}
       </main>
 
@@ -242,24 +280,42 @@ function Shell() {
   );
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({
+  onCreate, onOpenFile, onOpenFolder, onPalette,
+}: {
+  onCreate: () => void;
+  onOpenFile: () => void;
+  onOpenFolder: () => void;
+  onPalette: () => void;
+}) {
   return (
     <div className="empty">
       <img src="/spark-mark.svg" alt="" width={64} height={64} className="empty__logo" />
       <h1 className="empty__title">sparkEditor</h1>
-      <p className="empty__sub">Open a file, or start a new document to begin.</p>
+      <p className="empty__sub">Open a folder to explore its files, or start with a single document.</p>
       <div className="empty__actions">
-        <Button variant="primary" icon="plus" onClick={onCreate}>New document</Button>
-        <Button variant="secondary" icon="folder" onClick={() => window.dispatchEvent(new CustomEvent("spark:command", { detail: { id: "file.open" } }))}>
-          Open…
+        <Button variant="primary" icon="folder-open" onClick={onOpenFolder}>
+          Open Folder…
         </Button>
-        <Button variant="ghost" icon="command" onClick={() => window.dispatchEvent(new CustomEvent("spark:command", { detail: { id: "view.commandPalette" } }))}>
-          Command palette
+        <Button variant="secondary" icon="folder" onClick={onOpenFile}>
+          Open File…
+        </Button>
+        <Button variant="ghost" icon="plus" onClick={onCreate}>
+          New document
         </Button>
       </div>
       <p className="empty__hint">
-        <kbd>{isMac() ? "⌘" : "Ctrl"}</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the command palette
+        <kbd>{isMac() ? "⌘" : "Ctrl"}</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd> to open a folder ·{" "}
+        <kbd>{isMac() ? "⌘" : "Ctrl"}</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> for the command palette
       </p>
+      <Button
+        className="empty__palette-link"
+        variant="ghost"
+        icon="command"
+        onClick={onPalette}
+      >
+        Command palette
+      </Button>
     </div>
   );
 }
