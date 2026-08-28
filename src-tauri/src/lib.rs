@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use tauri_plugin_store::StoreExt;
 use thiserror::Error;
 
 #[derive(Error, Debug, Serialize, Deserialize)]
@@ -91,6 +93,7 @@ fn read_dir(path: String) -> Result<Vec<DirEntry>, HostError> {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DirEntry {
     pub name: String,
     pub is_file: bool,
@@ -118,6 +121,7 @@ fn stat(path: String) -> Result<FileStat, HostError> {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileStat {
     pub path: String,
     pub is_file: bool,
@@ -184,9 +188,111 @@ fn mkdir(path: String) -> Result<(), HostError> {
     }
 }
 
+#[tauri::command]
+fn read_file_base64(path: String) -> Result<String, HostError> {
+    let bytes = std::fs::read(&path).map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => HostError::NotFound { path: path.clone() },
+        std::io::ErrorKind::PermissionDenied => HostError::PermissionDenied { path: path.clone() },
+        _ => HostError::Internal {
+            message: e.to_string(),
+        },
+    })?;
+    // base64 encode without extra deps: use base64 crate if available, else manual
+    // Use `base64` via `tauri`'s dependency if present; fallback to manual.
+    // We add base64 crate as optional; implement simple encode.
+    Ok(encode_base64(&bytes))
+}
+
+fn encode_base64(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    let mut i = 0;
+    while i < input.len() {
+        let b0 = input[i] as u32;
+        let b1 = if i + 1 < input.len() {
+            input[i + 1] as u32
+        } else {
+            0
+        };
+        let b2 = if i + 2 < input.len() {
+            input[i + 2] as u32
+        } else {
+            0
+        };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[((triple >> 18) & 0x3F) as usize] as char);
+        out.push(TABLE[((triple >> 12) & 0x3F) as usize] as char);
+        out.push(if i + 1 < input.len() {
+            TABLE[((triple >> 6) & 0x3F) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if i + 2 < input.len() {
+            TABLE[(triple & 0x3F) as usize] as char
+        } else {
+            '='
+        });
+        i += 3;
+    }
+    out
+}
+
+const RECENTS_STORE: &str = "recents.json";
+const RECENTS_KEY: &str = "paths";
+const RECENTS_MAX: usize = 25;
+
+fn recents_load(app: &tauri::AppHandle) -> Result<Vec<String>, HostError> {
+    let store = app.store(RECENTS_STORE).map_err(|e| HostError::Internal {
+        message: e.to_string(),
+    })?;
+    let list = store
+        .get(RECENTS_KEY)
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok())
+        .unwrap_or_default();
+    Ok(list)
+}
+
+fn recents_save(app: &tauri::AppHandle, list: &[String]) -> Result<(), HostError> {
+    let store = app.store(RECENTS_STORE).map_err(|e| HostError::Internal {
+        message: e.to_string(),
+    })?;
+    store.set(RECENTS_KEY, json!(list));
+    store.save().map_err(|e| HostError::Internal {
+        message: e.to_string(),
+    })?;
+    Ok(())
+}
+
+#[tauri::command]
+fn recents_get(app: tauri::AppHandle) -> Result<Vec<String>, HostError> {
+    recents_load(&app)
+}
+
+#[tauri::command]
+fn recents_add(app: tauri::AppHandle, path: String) -> Result<Vec<String>, HostError> {
+    let mut list = recents_load(&app)?;
+    if path.is_empty() {
+        return Ok(list);
+    }
+    list.retain(|p| p != &path);
+    list.insert(0, path);
+    if list.len() > RECENTS_MAX {
+        list.truncate(RECENTS_MAX);
+    }
+    recents_save(&app, &list)?;
+    Ok(list)
+}
+
+#[tauri::command]
+fn recents_clear(app: tauri::AppHandle) -> Result<(), HostError> {
+    recents_save(&app, &[])?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -197,11 +303,15 @@ pub fn run() {
         .plugin(tauri_plugin_log::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             read_file,
+            read_file_base64,
             write_file,
             read_dir,
             stat,
             create_file,
             mkdir,
+            recents_get,
+            recents_add,
+            recents_clear,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

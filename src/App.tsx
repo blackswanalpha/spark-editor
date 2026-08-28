@@ -13,6 +13,7 @@
    ============================================================ */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "@motion/index";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { TitleBar } from "@shell/TitleBar";
 import { MenuBar } from "@shell/MenuBar";
 import { SideBar } from "@shell/SideBar";
@@ -22,23 +23,22 @@ import { CommandPalette } from "@shell/CommandPalette";
 import { CodeEditor } from "@editor/CodeEditor";
 import { MarkdownEditor } from "@editor/MarkdownEditor";
 import { RichEditor } from "@editor/RichEditor";
+import { HtmlPreview } from "@editor/HtmlPreview";
+import { SvgEditor } from "@editor/SvgEditor";
 import { SplashScreen } from "@shell/SplashScreen";
 import { ThemeProvider, useTheme } from "@theme/ThemeProvider";
 import { ToastProvider, useToast } from "@ui/Toast";
 import { useDocs } from "@store/documents";
 import { useExplorer } from "@store/explorer";
-import { readFile, recentsAdd, recentsGet, isTauri } from "@bridge/commands";
+import { readFile, recentsAdd, recentsGet, isTauri, pickMode } from "@bridge/commands";
+import { checkForUpdates, checkForUpdatesOnBoot } from "@bridge/updater";
 import { buildCommands, bindPalette, type CommandSpec, currentRoot, setCurrentRoot } from "@commands/registry";
 import { Button } from "@ui/Button";
 import { Icon } from "@ui/Icon";
 import OpenDialog from "@ui/OpenDialog";
+import SaveAsModal from "@shell/SaveAsModal";
+import UnsavedChangesModal, { type UnsavedChoice } from "@shell/UnsavedChangesModal";
 import "./App.css";
-
-function pickMode(path: string): "markdown" | "rich" | "code" {
-  if (/\.(md|markdown)$/i.test(path)) return "markdown";
-  if (/\.(html?|json)$/i.test(path)) return "rich";
-  return "code";
-}
 
 function Shell() {
   const { resolved } = useTheme();
@@ -47,18 +47,111 @@ function Shell() {
   const order = useDocs((s) => s.order);
   const active = useDocs((s) => s.active);
   const setActive = useDocs((s) => s.setActive);
-  const close = useDocs((s) => s.close);
   const open = useDocs((s) => s.open);
   const [showSidebar, setShowSidebar] = useState(true);
   const [showStatus, setShowStatus] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [recents, setRecents] = useState<{ path: string; name: string }[]>([]);
-  const [root, setRoot] = useState<string | null>(currentRoot);
+
+  /* SaveAs modal state */
+  const [saveAsOpen, setSaveAsOpen] = useState(false);
+  const [saveAsDocId, setSaveAsDocId] = useState<string | null>(null);
+  const [saveAsBusy, setSaveAsBusy] = useState(false);
+  const [saveAsError, setSaveAsError] = useState<string | null>(null);
+
+  /* Unsaved-changes modal state */
+  const [unsavedOpen, setUnsavedOpen] = useState(false);
+  const [unsavedDocId, setUnsavedDocId] = useState<string | null>(null);
+  const [unsavedContext, setUnsavedContext] = useState<string>("");
+  const [unsavedBusy, setUnsavedBusy] = useState(false);
+  const [unsavedError, setUnsavedError] = useState<string | null>(null);
+
+  const pendingCloseRef = useRef<(() => void) | null>(null);
 
   const commandsRef = useRef<CommandSpec[]>([]);
-  commandsRef.current = useMemo(() => buildCommands(), [paletteOpen]); // rebuild when palette visibility toggles
+  commandsRef.current = useMemo(() => buildCommands(), [paletteOpen]);
 
   useEffect(() => { bindPalette({ open: () => setPaletteOpen(true), close: () => setPaletteOpen(false) }); }, []);
+
+  /* Toast bridge: registry runs outside React and dispatches events
+     that we forward to the in-tree toast API. */
+  useEffect(() => {
+    const onSuccess = (e: Event) => {
+      const d = (e as CustomEvent<{ title: string; body?: string }>).detail;
+      if (d?.title) toast.success(d.title, d.body);
+    };
+    const onError = (e: Event) => {
+      const d = (e as CustomEvent<{ title: string; body?: string }>).detail;
+      if (d?.title) toast.error(d.title, d.body);
+    };
+    window.addEventListener("spark:toast:success", onSuccess);
+    window.addEventListener("spark:toast:error", onError);
+    return () => {
+      window.removeEventListener("spark:toast:success", onSuccess);
+      window.removeEventListener("spark:toast:error", onError);
+    };
+  }, [toast]);
+
+  /* Listen for "open Save As" requests (dispatched by file.save when
+     the active doc has no path). */
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ docId: string }>).detail;
+      setSaveAsDocId(detail?.docId ?? active ?? null);
+      setSaveAsError(null);
+      setSaveAsOpen(true);
+    };
+    window.addEventListener("spark:saveas:open", onOpen);
+    return () => window.removeEventListener("spark:saveas:open", onOpen);
+  }, [active]);
+
+  /* Tab close request: route through the unsaved-changes guard. */
+  useEffect(() => {
+    const onClose = (e: Event) => {
+      const detail = (e as CustomEvent<{ id: string }>).detail;
+      const id = detail?.id;
+      if (!id) return;
+      const doc = useDocs.getState().docs[id];
+      if (!doc) return;
+      if (!doc.dirty) {
+        useDocs.getState().close(id);
+        toast.info("Tab closed");
+        return;
+      }
+      pendingCloseRef.current = () => {
+        useDocs.getState().close(id);
+        toast.info("Tab closed");
+      };
+      setUnsavedDocId(id);
+      setUnsavedContext("");
+      setUnsavedError(null);
+      setUnsavedOpen(true);
+    };
+    window.addEventListener("spark:tab:close:request", onClose);
+    return () => window.removeEventListener("spark:tab:close:request", onClose);
+  }, [toast]);
+
+  /* Window close request: guard the active doc, then close the Tauri
+     window. */
+  useEffect(() => {
+    const onClose = async () => {
+      const id = active;
+      const doc = id ? useDocs.getState().docs[id] : null;
+      if (!doc?.dirty) {
+        try { await getCurrentWindow().close(); } catch {}
+        return;
+      }
+      pendingCloseRef.current = async () => {
+        try { await getCurrentWindow().close(); } catch {}
+      };
+      setUnsavedDocId(id);
+      setUnsavedContext("Quitting will discard your unsaved changes.");
+      setUnsavedError(null);
+      setUnsavedOpen(true);
+    };
+    window.addEventListener("spark:window:close:request", onClose);
+    return () => window.removeEventListener("spark:window:close:request", onClose);
+  }, [active]);
 
   // Boot: refresh recents + open last session (best effort)
   useEffect(() => {
@@ -67,7 +160,6 @@ function Shell() {
         const r = await recentsGet();
         setRecents(r.map((path) => ({ path, name: path.split("/").pop() || path })));
       } catch {}
-      // Open a welcome doc on first run
       try {
         if (order.length === 0) {
           const text = await readFile("/welcome.md");
@@ -127,13 +219,20 @@ function Shell() {
     return () => { cancelled = true; unlisten?.(); };
   }, []);
 
-  // Folder open: keep local root, the registry's `currentRoot`, and the
-  // explorer store all in sync so the three readers see the same value.
+  // OTA: silent check on boot + manual check via Help → Check for Updates
+  useEffect(() => {
+    if (isTauri) checkForUpdatesOnBoot(toast);
+    const onCheck = () => { void checkForUpdates({ silent: false, onInfo: toast.info, onSuccess: toast.success, onError: toast.error }); };
+    window.addEventListener("spark:help:checkForUpdates", onCheck);
+    return () => window.removeEventListener("spark:help:checkForUpdates", onCheck);
+  }, [toast]);
+
+  // Folder open: keep the registry's `currentRoot` and the explorer store
+  // in sync so the three readers see the same value.
   useEffect(() => {
     const onFolderOpen = (e: Event) => {
       const path = (e as CustomEvent<{ path: string }>).detail?.path;
       if (!path) return;
-      setRoot(path);
       setCurrentRoot(path);
       void useExplorer.getState().setRoot(path);
     };
@@ -143,26 +242,23 @@ function Shell() {
 
   const activeDoc = active ? docs[active] : null;
 
-  // Derive the explorer root: explicit folder-open first; fall back to the
-  // active document's parent directory when no folder is open yet.
   const explorerRoot = useExplorer((s) => s.root);
-  const rootFromDocOnce = useRef(false);
+  const explicitRoot = useExplorer((s) => s.explicitRoot);
   useEffect(() => {
-    if (explorerRoot) { rootFromDocOnce.current = true; return; }
-    if (rootFromDocOnce.current) return;
+    if (explicitRoot) return;
+    if (explorerRoot) return;
     const path = activeDoc?.path;
     if (!path) return;
-    const parent = path.split("/").slice(0, -1).join("/") || "/";
-    rootFromDocOnce.current = true;
+    const parent = path.split(/[\\/]/).slice(0, -1).join("/") || "/";
     void useExplorer.getState().setRoot(parent);
-  }, [explorerRoot, activeDoc?.path]);
+  }, [explicitRoot, explorerRoot, activeDoc?.path]);
 
   const tabList = order.map((id) => {
     const d = docs[id];
     return {
       id,
       label: d.name + (d.dirty ? "" : ""),
-      icon: d.mode === "markdown" ? "mode-markdown" : d.mode === "rich" ? "mode-rich" : "mode-code",
+      icon: d.mode === "markdown" ? "mode-markdown" : d.mode === "rich" ? "mode-rich" : d.mode === "html" ? "mode-html" : d.mode === "svg" ? "mode-svg" : "mode-code",
       dirty: d.dirty,
       closable: true,
     };
@@ -179,7 +275,7 @@ function Shell() {
       <MenuBar commands={commandsRef.current} hasActiveDoc={!!activeDoc} />
 
       <AnimatePresence>
-        {showSidebar && order.length > 0 && (
+        {showSidebar && (
           <motion.aside
             key="sidebar"
             className="app__sidebar"
@@ -218,7 +314,7 @@ function Shell() {
               tabs={tabList}
               activeId={active || ""}
               onSelect={setActive}
-              onClose={(id) => { close(id); toast.info("Tab closed"); }}
+              onClose={(id) => { window.dispatchEvent(new CustomEvent("spark:tab:close:request", { detail: { id } })); }}
             />
             <div className="app__editor">
               <AnimatePresence mode="wait">
@@ -233,6 +329,8 @@ function Shell() {
                   >
                     {activeDoc.mode === "markdown" && <MarkdownEditor docId={activeDoc.id} />}
                     {activeDoc.mode === "rich"     && <RichEditor     docId={activeDoc.id} />}
+                    {activeDoc.mode === "html"     && <HtmlPreview    docId={activeDoc.id} />}
+                    {activeDoc.mode === "svg"      && <SvgEditor      docId={activeDoc.id} />}
                     {activeDoc.mode === "code"     && <CodeEditor     docId={activeDoc.id} />}
                   </motion.div>
                 )}
@@ -276,6 +374,90 @@ function Shell() {
         commands={commandsRef.current}
       />
       <OpenDialog />
+      <SaveAsModal
+        open={saveAsOpen}
+        onOpenChange={(o) => {
+          setSaveAsOpen(o);
+          if (!o) { setSaveAsError(null); setSaveAsDocId(null); }
+        }}
+        currentName={saveAsDocId ? (docs[saveAsDocId]?.name ?? "Untitled") : "Untitled"}
+        currentPath={saveAsDocId ? (docs[saveAsDocId]?.path ?? null) : null}
+        busy={saveAsBusy}
+        errorMessage={saveAsError}
+        onConfirm={async (path) => {
+          if (!saveAsDocId) return;
+          setSaveAsBusy(true);
+          setSaveAsError(null);
+          const result = await useDocs.getState().saveDocumentAs(saveAsDocId, { defaultPath: path });
+          setSaveAsBusy(false);
+          if (result.ok) {
+            toast.success("File saved");
+            setSaveAsOpen(false);
+            if (pendingCloseRef.current) {
+              const fn = pendingCloseRef.current;
+              pendingCloseRef.current = null;
+              fn();
+            }
+          } else if (result.reason === "cancelled") {
+            // user closed native dialog with cancel; leave modal open
+          } else {
+            setSaveAsError(result.error instanceof Error ? result.error.message : String(result.error ?? "Unknown error"));
+          }
+        }}
+      />
+      <UnsavedChangesModal
+        open={unsavedOpen}
+        onOpenChange={(o) => {
+          if (!unsavedBusy) {
+            setUnsavedOpen(o);
+            if (!o) { setUnsavedDocId(null); setUnsavedError(null); pendingCloseRef.current = null; }
+          }
+        }}
+        documentName={unsavedDocId ? (docs[unsavedDocId]?.name ?? "Untitled") : "Untitled"}
+        context={unsavedContext}
+        busy={unsavedBusy}
+        errorMessage={unsavedError}
+        onChoose={async (choice: UnsavedChoice) => {
+          const id = unsavedDocId;
+          if (!id) return;
+          if (choice === "cancel") {
+            setUnsavedOpen(false);
+            pendingCloseRef.current = null;
+            return;
+          }
+          if (choice === "discard") {
+            setUnsavedOpen(false);
+            const fn = pendingCloseRef.current;
+            pendingCloseRef.current = null;
+            if (fn) fn();
+            return;
+          }
+          // "save"
+          const doc = useDocs.getState().docs[id];
+          if (!doc) { setUnsavedOpen(false); return; }
+          setUnsavedBusy(true);
+          setUnsavedError(null);
+          if (!doc.path) {
+            setUnsavedBusy(false);
+            setUnsavedOpen(false);
+            setSaveAsDocId(id);
+            setSaveAsError(null);
+            setSaveAsOpen(true);
+            return;
+          }
+          const result = await useDocs.getState().saveDocument(id);
+          setUnsavedBusy(false);
+          if (result.ok) {
+            toast.success("File saved");
+            setUnsavedOpen(false);
+            const fn = pendingCloseRef.current;
+            pendingCloseRef.current = null;
+            if (fn) fn();
+          } else {
+            setUnsavedError(result.error instanceof Error ? result.error.message : String(result.error ?? "Unknown error"));
+          }
+        }}
+      />
     </div>
   );
 }

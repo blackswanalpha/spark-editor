@@ -7,10 +7,12 @@ import { create } from "zustand";
 import { produce, enableMapSet } from "immer";
 import type { Document } from "@ir/types";
 import { newId } from "@ir/ids";
+import { writeFile, saveFileDialog, recentsAdd } from "@bridge/commands";
+import type { DialogFilter } from "@bridge/commands";
 
 enableMapSet();
 
-export type DocMode = "markdown" | "rich" | "code";
+export type DocMode = "markdown" | "rich" | "code" | "html" | "svg";
 
 export interface OpenDoc {
   id: string;
@@ -23,6 +25,22 @@ export interface OpenDoc {
   dirty: boolean;
   cursor: { line: number; col: number };
 }
+
+/**
+ * Return the basename of a path. Accepts both POSIX ("/") and Windows ("\\")
+ * separators.  Trailing separators are ignored, so "a/b/" yields "b".
+ * Empty input returns "".
+ */
+export function basename(path: string): string {
+  if (!path) return "";
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const idx = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  return idx < 0 ? trimmed : trimmed.slice(idx + 1);
+}
+
+export type SaveResult =
+  | { ok: true; path: string }
+  | { ok: false; reason: "no-active-doc" | "no-path" | "cancelled" | "error"; error?: unknown };
 
 interface State {
   docs: Record<string, OpenDoc>;
@@ -45,6 +63,16 @@ interface Actions {
   redo: (id: string) => void;
   setName: (id: string, name: string) => void;
   setPath: (id: string, path: string) => void;
+  saveDocument: (id: string) => Promise<SaveResult>;
+  saveDocumentAs: (
+    id: string,
+    opts?: { defaultPath?: string; filters?: DialogFilter[] }
+  ) => Promise<SaveResult>;
+  saveAllDirty: () => Promise<{
+    saved: string[];
+    cancelled: boolean;
+    errors: Array<{ id: string; error: unknown }>;
+  }>;
 }
 
 export const useDocs = create<State & Actions>((set, get) => ({
@@ -74,8 +102,8 @@ export const useDocs = create<State & Actions>((set, get) => ({
   },
 
   close: (id) => set((s) => {
-    const { [id]: _, ...rest } = s.docs;
-    const { [id]: __, ...histRest } = s.history;
+    const { [id]: _unusedDoc, ...rest } = s.docs;
+    const { [id]: _unusedHist, ...histRest } = s.history;
     const order = s.order.filter((x) => x !== id);
     return {
       docs: rest,
@@ -150,6 +178,64 @@ export const useDocs = create<State & Actions>((set, get) => ({
 
   setName: (id, name) => set((s) => ({ docs: { ...s.docs, [id]: { ...s.docs[id], name } } })),
   setPath: (id, path) => set((s) => ({ docs: { ...s.docs, [id]: { ...s.docs[id], path } } })),
+
+  saveDocument: async (id) => {
+    const doc = get().docs[id];
+    if (!doc) return { ok: false, reason: "no-active-doc" };
+    if (doc.path == null) return { ok: false, reason: "no-path" };
+    try {
+      await writeFile(doc.path, doc.raw);
+      get().setPath(id, doc.path);
+      get().setName(id, basename(doc.path));
+      get().markClean(id);
+      await recentsAdd(doc.path);
+      return { ok: true, path: doc.path };
+    } catch (error) {
+      return { ok: false, reason: "error", error };
+    }
+  },
+
+  saveDocumentAs: async (id, opts) => {
+    const doc = get().docs[id];
+    if (!doc) return { ok: false, reason: "no-active-doc" };
+    const path = await saveFileDialog({
+      defaultPath: opts?.defaultPath ?? doc.path ?? doc.name,
+      filters: opts?.filters,
+    });
+    if (path == null || path === "") return { ok: false, reason: "cancelled" };
+    try {
+      await writeFile(path, doc.raw);
+      get().setPath(id, path);
+      get().setName(id, basename(path));
+      get().markClean(id);
+      await recentsAdd(path);
+      return { ok: true, path };
+    } catch (error) {
+      return { ok: false, reason: "error", error };
+    }
+  },
+
+  saveAllDirty: async () => {
+    const saved: string[] = [];
+    const errors: Array<{ id: string; error: unknown }> = [];
+    let cancelled = false;
+    const dirtyIds = Object.values(get().docs).filter((d) => d.dirty).map((d) => d.id);
+    for (const id of dirtyIds) {
+      if (cancelled) break;
+      let result = await get().saveDocument(id);
+      if (!result.ok && result.reason === "no-path") {
+        result = await get().saveDocumentAs(id);
+      }
+      if (result.ok) {
+        saved.push(result.path);
+      } else if (result.reason === "cancelled") {
+        cancelled = true;
+      } else if (result.reason === "error") {
+        errors.push({ id, error: result.error });
+      }
+    }
+    return { saved, cancelled, errors };
+  },
 }));
 
 /* helpers */

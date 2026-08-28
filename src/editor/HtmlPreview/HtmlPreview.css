@@ -1,0 +1,104 @@
+/* ============================================================
+   sparkEditor · HtmlPreview.css
+   HTML webview — no-server iframe + code split + toolbar.
+   ============================================================ */
+.html-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--surface-1);
+}
+
+.html-preview__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.html-preview__url {
+  flex: 1;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--size-xs, 12px);
+  overflow: hidden;
+}
+.html-preview__url span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.html-preview__warnings {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--warning-soft, #fff3cd);
+  color: var(--warning, #856404);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--size-xs, 12px);
+  overflow-x: auto;
+}
+.html-preview__warnings ul { margin: 0; padding-left: 16px; }
+.html-preview__split {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+}
+.html-preview--with-code .html-preview__split {
+  grid-template-columns: 1fr 1fr;
+}
+.html-preview:not(.html-preview--with-code) .html-preview__split {
+  grid-template-columns: 1fr;
+}
+.html-preview__code {
+  min-width: 0;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.html-preview__frame-wrap {
+  min-width: 0;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+.html-preview__frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+  flex: 1;
+}
+.html-preview__frame--mobile {
+  max-width: 390px;
+  margin: 0 auto;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  box-shadow: var(--shadow-2);
+}
+.html-preview__dev-hint {
+  position: absolute;
+  left: 8px; bottom: 8px;
+  padding: 2px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.html-preview__spacer { flex: 1; }
+.html-preview__divider { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }

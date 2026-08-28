@@ -8,7 +8,7 @@
    ============================================================ */
 import { create } from "zustand";
 import { enableMapSet } from "immer";
-import { readDir, createFile as bridgeCreateFile } from "@bridge/commands";
+import { readDir, createFile as bridgeCreateFile, mkdir as bridgeMkdir } from "@bridge/commands";
 import { on } from "@bridge/events";
 
 enableMapSet();
@@ -36,17 +36,25 @@ export interface CreateFileResult {
 /* ---------- State ---------- */
 interface State {
   root: string | null;
+  explicitRoot: boolean;
   expanded: Set<string>;
   children: Map<string, ExplorerNode[]>;
   loading: Set<string>;
   errors: Map<string, string>;
   selectedPath: string | null;
   showHidden: boolean;
+  history: string[];
+  historyIndex: number;
 }
 
 /* ---------- Actions ---------- */
 interface Actions {
   setRoot: (path: string | null) => Promise<void>;
+  goUp: () => Promise<void>;
+  goBack: () => Promise<void>;
+  goForward: () => Promise<void>;
+  canGoBack: () => boolean;
+  canGoForward: () => boolean;
   toggleShowHidden: () => void;
   setExpanded: (path: string, expanded: boolean) => Promise<void>;
   toggleDir: (path: string) => Promise<void>;
@@ -55,14 +63,39 @@ interface Actions {
   collapseAll: () => void;
   setSelected: (path: string | null) => void;
   createFile: (parentDir: string, name: string) => Promise<CreateFileResult>;
+  createFolder: (parentDir: string, name: string) => Promise<CreateFileResult>;
   subscribeToFileChanges: () => Promise<() => void>;
 }
 
-/* ---------- Module-scope: keep the latest unlisten so the
-   subscribe action is idempotent (App.tsx calls it once). */
-let _fileChangeUnlisten: (() => void) | null = null;
+/* ---------- Module-scope: monotonic load generation.
+   Bumped on every setRoot() so any in-flight loadChildren from a
+   previous root can detect it's stale and drop its result. */
+let _loadGen = 0;
 
 /* ---------- Helpers ---------- */
+function normalizeRoot(path: string): string {
+  if (!path) return "/";
+  let p = String(path).trim();
+  // Strip surrounding quotes (some dialogs return quoted paths).
+  if ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))) {
+    p = p.slice(1, -1);
+  }
+  // Strip file:// URI scheme (case-insensitive).
+  p = p.replace(/^file:\/\//i, "");
+  // On Windows the file:///C:/foo becomes /C:/foo; strip the leading slash before drive letter.
+  p = p.replace(/^\/([A-Za-z]:)/, "$1");
+  // Decode percent-encoded characters.
+  try { p = decodeURIComponent(p); } catch { /* leave as-is if malformed */ }
+  // Normalize all backslashes to forward slashes.
+  p = p.replace(/\\/g, "/");
+  // Strip trailing slashes (but keep a single "/" for root).
+  p = p.replace(/\/+$/, "");
+  if (p === "") return "/";
+  // Ensure leading slash.
+  if (!p.startsWith("/")) p = "/" + p;
+  return p;
+}
+
 function joinPath(parent: string, name: string): string {
   if (parent.endsWith("/") || parent.endsWith("\\")) return parent + name;
   return parent + "/" + name;
@@ -72,42 +105,172 @@ function isUnder(child: string, ancestor: string): boolean {
   return child === ancestor || child.startsWith(ancestor + "/") || child.startsWith(ancestor + "\\");
 }
 
+/** Return the parent directory of `path`, or `null` if `path` is the root "/". */
+function parentOf(path: string): string | null {
+  const norm = normalizeRoot(path);
+  if (norm === "/") return null;
+  const idx = Math.max(norm.lastIndexOf("/"), norm.lastIndexOf("\\"));
+  if (idx <= 0) return "/";
+  return norm.slice(0, idx) || "/";
+}
+
+/* ---------- internal: push history (truncate forward) ---------- */
+function pushHistory(get: () => State & Actions, set: (p: Partial<State>) => void, path: string) {
+  const { history, historyIndex } = get();
+  if (historyIndex >= 0 && history[historyIndex] === path) return;
+  const truncated = historyIndex >= 0 ? history.slice(0, historyIndex + 1) : [];
+  truncated.push(path);
+  // keep reasonable cap (100)
+  const capped = truncated.length > 100 ? truncated.slice(truncated.length - 100) : truncated;
+  set({ history: capped, historyIndex: capped.length - 1 });
+}
+
 /* ---------- Store ---------- */
 export const useExplorer = create<State & Actions>((set, get) => ({
   root: null,
+  explicitRoot: false,
   expanded: new Set<string>(),
   children: new Map<string, ExplorerNode[]>(),
   loading: new Set<string>(),
   errors: new Map<string, string>(),
   selectedPath: null,
   showHidden: false,
+  history: [],
+  historyIndex: -1,
 
   setRoot: async (path) => {
+    _loadGen++;
     if (path === null) {
       set({
         root: null,
+        explicitRoot: false,
         expanded: new Set<string>(),
         children: new Map<string, ExplorerNode[]>(),
         loading: new Set<string>(),
         errors: new Map<string, string>(),
         selectedPath: null,
+        history: [],
+        historyIndex: -1,
       });
+      console.info("[explorer] setRoot", { from: get().root, to: null });
+      window.dispatchEvent(new CustomEvent("spark:explorer:root-changed", { detail: { root: null } }));
       return;
     }
+    const normalized = normalizeRoot(path);
+    const isSameRoot = get().root === normalized;
     set({
-      root: path,
-      expanded: new Set<string>([path]),
-      children: new Map<string, ExplorerNode[]>(),
+      root: normalized,
+      explicitRoot: true,
+      expanded: new Set<string>([normalized]),
+      children: isSameRoot ? new Map<string, ExplorerNode[]>(get().children) : new Map<string, ExplorerNode[]>(),
       loading: new Set<string>(),
       errors: new Map<string, string>(),
+      selectedPath: null,
     });
-    await get().loadChildren(path);
+    pushHistory(get, set as any, normalized);
+    console.info("[explorer] setRoot", { from: get().root === normalized ? normalized : "(previous)", to: normalized, isSameRoot });
+    window.dispatchEvent(new CustomEvent("spark:explorer:root-changed", { detail: { root: normalized } }));
+    await get().loadChildren(normalized);
+  },
+
+  goUp: async () => {
+    _loadGen++;
+    const current = get().root;
+    if (!current) return;
+    const parent = parentOf(current);
+    if (!parent) return;
+    const prevExpanded = get().expanded;
+    const prevChildren = get().children;
+    const keptExpanded = new Set<string>([parent, current]);
+    for (const e of prevExpanded) {
+      if (e !== current && isUnder(e, parent)) keptExpanded.add(e);
+    }
+    const keptChildren = new Map<string, ExplorerNode[]>();
+    for (const [k, v] of prevChildren) {
+      if (isUnder(k, parent)) keptChildren.set(k, v);
+    }
+    set({
+      root: parent,
+      explicitRoot: true,
+      expanded: keptExpanded,
+      children: keptChildren,
+      loading: new Set<string>(),
+      errors: new Map<string, string>(),
+      selectedPath: null,
+    });
+    pushHistory(get, set as any, parent);
+    console.info("[explorer] goUp", { from: current, to: parent });
+    window.dispatchEvent(new CustomEvent("spark:explorer:root-changed", { detail: { root: parent } }));
+    await get().loadChildren(parent);
+  },
+
+  goBack: async () => {
+    const { history, historyIndex } = get();
+    if (historyIndex <= 0) return;
+    const target = history[historyIndex - 1];
+    _loadGen++;
+    const prevExpanded = get().expanded;
+    const prevChildren = get().children;
+    const keptExpanded = new Set<string>([target]);
+    for (const e of prevExpanded) {
+      if (isUnder(e, target)) keptExpanded.add(e);
+    }
+    const keptChildren = new Map<string, ExplorerNode[]>();
+    for (const [k, v] of prevChildren) {
+      if (isUnder(k, target)) keptChildren.set(k, v);
+    }
+    set({
+      root: target,
+      explicitRoot: true,
+      historyIndex: historyIndex - 1,
+      expanded: keptExpanded,
+      children: keptChildren,
+      loading: new Set<string>(),
+      errors: new Map<string, string>(),
+      selectedPath: null,
+    });
+    window.dispatchEvent(new CustomEvent("spark:explorer:root-changed", { detail: { root: target } }));
+    await get().loadChildren(target);
+  },
+
+  goForward: async () => {
+    const { history, historyIndex } = get();
+    if (historyIndex < 0 || historyIndex >= history.length - 1) return;
+    const target = history[historyIndex + 1];
+    _loadGen++;
+    const prevExpanded = get().expanded;
+    const prevChildren = get().children;
+    const keptExpanded = new Set<string>([target]);
+    for (const e of prevExpanded) {
+      if (isUnder(e, target)) keptExpanded.add(e);
+    }
+    const keptChildren = new Map<string, ExplorerNode[]>();
+    for (const [k, v] of prevChildren) {
+      if (isUnder(k, target)) keptChildren.set(k, v);
+    }
+    set({
+      root: target,
+      explicitRoot: true,
+      historyIndex: historyIndex + 1,
+      expanded: keptExpanded,
+      children: keptChildren,
+      loading: new Set<string>(),
+      errors: new Map<string, string>(),
+      selectedPath: null,
+    });
+    window.dispatchEvent(new CustomEvent("spark:explorer:root-changed", { detail: { root: target } }));
+    await get().loadChildren(target);
+  },
+
+  canGoBack: () => get().historyIndex > 0,
+  canGoForward: () => {
+    const { history, historyIndex } = get();
+    return historyIndex >= 0 && historyIndex < history.length - 1;
   },
 
   toggleShowHidden: () => {
     set({
       showHidden: !get().showHidden,
-      children: new Map<string, ExplorerNode[]>(),
     });
   },
 
@@ -127,6 +290,7 @@ export const useExplorer = create<State & Actions>((set, get) => ({
   },
 
   loadChildren: async (path) => {
+    const myGen = _loadGen;
     const loading = new Set(get().loading);
     const errors = new Map(get().errors);
     loading.add(path);
@@ -134,18 +298,25 @@ export const useExplorer = create<State & Actions>((set, get) => ({
     set({ loading, errors });
     try {
       const entries = await readDir(path);
-      const nodes: ExplorerNode[] = (entries ?? []).map((e) => ({
-        name: e.name,
-        path: joinPath(path, e.name),
-        isDir: e.isDir,
-        isFile: e.isFile,
-      }));
+      if (myGen !== _loadGen) return;
+      const nodes: ExplorerNode[] = (entries ?? []).map((e: any) => {
+        const isDir = Boolean(e.isDir ?? e.is_dir);
+        const isFileRaw = e.isFile ?? e.is_file;
+        const isFile = isFileRaw !== undefined ? Boolean(isFileRaw) : !isDir;
+        return {
+          name: e.name,
+          path: joinPath(path, e.name),
+          isDir,
+          isFile,
+        };
+      });
       const children = new Map(get().children);
       const loadingAfter = new Set(get().loading);
       children.set(path, nodes);
       loadingAfter.delete(path);
       set({ children, loading: loadingAfter });
     } catch (err: any) {
+      if (myGen !== _loadGen) return;
       const loadingAfter = new Set(get().loading);
       const errorsAfter = new Map(get().errors);
       loadingAfter.delete(path);
@@ -175,7 +346,11 @@ export const useExplorer = create<State & Actions>((set, get) => ({
   },
 
   collapseAll: () => {
-    set({ expanded: new Set<string>() });
+    const root = get().root;
+    // Keep the root expanded so the top-level children remain accessible.
+    // Clearing everything (including the root) leaves the tree empty with
+    // no way to re-expand — the user would perceive this as "cannot access folders".
+    set({ expanded: root ? new Set<string>([root]) : new Set<string>() });
   },
 
   setSelected: (path) => {
@@ -189,7 +364,6 @@ export const useExplorer = create<State & Actions>((set, get) => ({
     } catch (err: any) {
       return { ok: false, error: String(err?.message ?? err) };
     }
-    // If the parent is currently cached (i.e. expanded earlier), splice in.
     const cached = get().children.get(parentDir);
     if (cached) {
       if (!cached.some((n) => n.name === name)) {
@@ -198,18 +372,63 @@ export const useExplorer = create<State & Actions>((set, get) => ({
           ...cached,
           { name, path: fullPath, isDir: false, isFile: true },
         ]);
-        set({ children });
+        // keep sorted: dirs first, then alpha
+        const sorted = children.get(parentDir)!.slice().sort((a, b) => {
+          if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+        children.set(parentDir, sorted);
+        // ensure parent is expanded so new file is visible immediately
+        const expanded = new Set(get().expanded);
+        expanded.add(parentDir);
+        set({ children, expanded });
       }
     } else {
-      // Otherwise trigger a refresh so the next expansion picks it up.
       void get().refresh(parentDir);
     }
     return { ok: true };
   },
 
+  createFolder: async (parentDir, name) => {
+    const fullPath = joinPath(parentDir, name);
+    try {
+      await bridgeMkdir(fullPath);
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+    const cached = get().children.get(parentDir);
+    if (cached) {
+      if (!cached.some((n) => n.name === name)) {
+        const children = new Map(get().children);
+        children.set(parentDir, [
+          ...cached,
+          { name, path: fullPath, isDir: true, isFile: false },
+        ]);
+        const sorted = children.get(parentDir)!.slice().sort((a, b) => {
+          if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+        children.set(parentDir, sorted);
+        const expanded = new Set(get().expanded);
+        expanded.add(parentDir);
+        set({ children, expanded });
+      }
+    } else {
+      void get().refresh(parentDir);
+    }
+    // also ensure newly created folder is cached as empty
+    if (!get().children.has(fullPath)) {
+      const children = new Map(get().children);
+      children.set(fullPath, []);
+      set({ children });
+    }
+    return { ok: true };
+  },
+
   subscribeToFileChanges: async () => {
-    if (_fileChangeUnlisten) return _fileChangeUnlisten;
-    _fileChangeUnlisten = await on<FileChangeEvent>("file:changed", (evt) => {
+    // Each call returns its own unlisten so callers can manage
+    // their own subscription lifecycle (no module-level caching).
+    const unlisten = await on<FileChangeEvent>("file:changed", (evt) => {
       const state = get();
       const root = state.root;
       if (!root || !evt?.path) return;
@@ -238,7 +457,7 @@ export const useExplorer = create<State & Actions>((set, get) => ({
         void state.loadChildren(a);
       }
     });
-    return _fileChangeUnlisten;
+    return unlisten;
   },
 }));
 

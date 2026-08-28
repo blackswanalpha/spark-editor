@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "sparkEditor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.sparkeditor.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -26,18 +26,52 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost https://github.com https://*.github.com https://*.githubusercontent.com"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "sparkEditor team",
+    "category": "DeveloperTool",
+    "shortDescription": "One window. Three modes. Markdown, rich, code.",
+    "longDescription": "sparkEditor — markdown, rich, code in one window. File is source of truth.",
     "icon": [
       "icons/32x32.png",
+      "icons/64x64.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
+      "icons/icon.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true,
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "language": "en-US"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.13"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "RWQ8g3GffHCTjahBt43haZ/Je4Sx0O4PEQti3+EILpHxSYdjcTS90krV",
+      "endpoints": [
+        "https://github.com/blackswanalpha/spark-editor/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
