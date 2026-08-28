@@ -9,13 +9,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 ## [Unreleased]
 
 ### Added
-- Nothing yet.
+- **Splash screen rework** — `src/shell/SplashScreen.tsx` — stages now mirror the real boot sequence (assets → theme → IPC bridge → `state.json` → session restore → ready) with a `v{version}` meta line (`src/version.ts`, sourced from `package.json`); dismissal is gated on actual boot completion (`ready` prop from `App.tsx` boot effect), not a fake timer. Splash moved to the app root (covers the full window; `App.css` `.app` gains `position: relative`).
+- **First-time setup** — `src/shell/Onboarding.tsx` + `Onboarding.css` — first-run empty state (welcome cards: New document / Open file… / Open folder…, recents list, palette hint) replacing the old `EmptyState`; `src/shell/WelcomeWizard.tsx` + `WelcomeWizard.css` — 3-step first-run wizard (intro → theme pick (applies live, all 5 themes) → ready), Esc skips, focus moves per step and is restored on close (A11Y-002); `src/shell/firstRun.ts` — `spark.onboarded` localStorage flag + `shouldShowWelcome()` gate (first run only when there are no recents and no docs open); new Help → "Show Welcome Screen" command (`help.welcome` → `spark:help:welcome`).
+- **Loader** — `src/ui/Loader.tsx` — `LoaderOverlay` full-surface waiting state (spinner + message, blocking variant) for long-running host work; `prefers-reduced-motion` support in `Loader.css`.
 
 ### Changed
-- Nothing yet.
+- `src/App.tsx` — boot effect sets `bootReady` (gates the splash) and opens the welcome wizard on first run instead of force-loading the sample document; `@version` alias added to `tsconfig.json` + `vite.config.ts`.
 
 ### Fixed
-- Nothing yet.
+- **Updater: missing-platform errors no longer surface as "Update check failed"** — `src/bridge/updater.ts` — error classification extracted to `classifyUpdaterError()` (`no-release` / `no-platform` / `error`); the Tauri error `None of the fallback platforms ["linux-x86_64"] were found in the response 'platforms' object` (published `latest.json` had no Linux entry) is now treated as "No updates — No update available for this platform yet" in both silent and manual checks. Root cause on the release side: `.github/workflows/release.yml` ubuntu leg lacked `libfuse2` and used bundle target `all`, which can silently drop the AppImage updater artifact; now installs `libfuse2`, pins `--bundles appimage,deb` on Linux, and the `verify-ota` job fails the release if `latest.json` lacks `linux-x86_64`.
 
 ---
 

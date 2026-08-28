@@ -334,6 +334,12 @@ export function buildCommands(): CommandSpec[] {
       run: () => { window.dispatchEvent(new CustomEvent("spark:help:reportIssue", { detail: { silent: true } })); },
     },
     {
+      id: "help.welcome", title: "Show Welcome Screen", category: "Help",
+      icon: "eye",
+      keywords: ["onboarding", "first run", "wizard", "theme"],
+      run: () => { window.dispatchEvent(new CustomEvent("spark:help:welcome")); },
+    },
+    {
       id: "help.checkForUpdates", title: "Check for Updates…", category: "Help",
       icon: "refresh",
       keywords: ["ota", "update", "updater"],
