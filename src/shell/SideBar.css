@@ -170,6 +170,7 @@ ul.sidebar__list {
 }
 .explorer__bubble-item:hover { background: var(--surface-3); color: var(--text); }
 .explorer__bubble-item:active { background: var(--accent-soft); }
+.explorer__bubble-sep { height: 1px; background: var(--border); margin: 4px 6px; border: none; }
 
 /* create dialog */
 .create-dialog { display: flex; flex-direction: column; gap: 14px; }

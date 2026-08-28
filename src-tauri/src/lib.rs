@@ -189,6 +189,137 @@ fn mkdir(path: String) -> Result<(), HostError> {
 }
 
 #[tauri::command]
+fn rename(from: String, to: String) -> Result<(), HostError> {
+    if std::fs::metadata(&to).is_ok() {
+        return Err(HostError::AlreadyExists { path: to });
+    }
+    if let Some(parent) = std::path::Path::new(&to).parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::rename(&from, &to)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete(path: String) -> Result<(), HostError> {
+    let meta = std::fs::metadata(&path)?;
+    if meta.is_dir() {
+        std::fs::remove_dir_all(&path)?;
+    } else {
+        std::fs::remove_file(&path)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn copy(from: String, to: String) -> Result<(), HostError> {
+    if std::fs::metadata(&to).is_ok() {
+        return Err(HostError::AlreadyExists { path: to });
+    }
+    if let Some(parent) = std::path::Path::new(&to).parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let meta = std::fs::metadata(&from)?;
+    if meta.is_dir() {
+        copy_dir_recursive(std::path::Path::new(&from), std::path::Path::new(&to))?;
+    } else {
+        std::fs::copy(&from, &to)?;
+    }
+    Ok(())
+}
+
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn open_in_terminal(cwd: String) -> Result<(), HostError> {
+    use std::process::Command;
+    let (shell, args) = if cfg!(target_os = "macos") {
+        // `open -a Terminal <cwd>` opens Terminal.app at `cwd`.
+        ("open".to_string(), vec!["-a".to_string(), "Terminal".to_string(), cwd.clone()])
+    } else if cfg!(target_os = "windows") {
+        // `cmd /K cd /d <cwd>` opens a new console window rooted at `cwd`.
+        ("cmd".to_string(), vec!["/C".to_string(), "start".to_string(), "cmd".to_string(), "/K".to_string(), format!("cd /d {}", cwd)])
+    } else {
+        // Linux / *BSD: try common terminal emulators; fall back to x-terminal-emulator.
+        for term in ["x-terminal-emulator", "gnome-terminal", "konsole", "alacritty", "xterm"] {
+            if Command::new("which").arg(term).output().map(|o| o.status.success()).unwrap_or(false) {
+                let arg = match term {
+                    "gnome-terminal" => format!("--working-directory={}", cwd),
+                    "konsole" => format!("--workdir {}", cwd),
+                    "alacritty" => format!("--working-directory {}", cwd),
+                    _ => cwd.clone(),
+                };
+                return Command::new(term)
+                    .args([arg.as_str()])
+                    .spawn()
+                    .map(|_| ())
+                    .map_err(|e| HostError::Internal { message: e.to_string() });
+            }
+        }
+        return Err(HostError::Internal { message: "No terminal emulator found".to_string() });
+    };
+    Command::new(&shell)
+        .args(&args)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| HostError::Internal { message: e.to_string() })
+}
+
+#[tauri::command]
+fn reveal_in_folder(path: String) -> Result<(), HostError> {
+    use std::process::Command;
+    if cfg!(target_os = "macos") {
+        Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| HostError::Internal { message: e.to_string() })
+    } else if cfg!(target_os = "windows") {
+        Command::new("explorer")
+            .arg(format!("/select,{}", path))
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| HostError::Internal { message: e.to_string() })
+    } else {
+        let parent = std::path::Path::new(&path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "/".to_string());
+        Command::new("xdg-open")
+            .arg(&parent)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| HostError::Internal { message: e.to_string() })
+    }
+}
+
+#[tauri::command]
+fn open_with_os(path: String) -> Result<(), HostError> {
+    use std::process::Command;
+    if cfg!(target_os = "macos") {
+        Command::new("open").arg(&path).spawn().map(|_| ()).map_err(|e| HostError::Internal { message: e.to_string() })
+    } else if cfg!(target_os = "windows") {
+        Command::new("cmd").args(["/C", "start", "", &path]).spawn().map(|_| ()).map_err(|e| HostError::Internal { message: e.to_string() })
+    } else {
+        Command::new("xdg-open").arg(&path).spawn().map(|_| ()).map_err(|e| HostError::Internal { message: e.to_string() })
+    }
+}
+
+#[tauri::command]
 fn read_file_base64(path: String) -> Result<String, HostError> {
     let bytes = std::fs::read(&path).map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => HostError::NotFound { path: path.clone() },
@@ -309,6 +440,12 @@ pub fn run() {
             stat,
             create_file,
             mkdir,
+            rename,
+            delete,
+            copy,
+            open_in_terminal,
+            reveal_in_folder,
+            open_with_os,
             recents_get,
             recents_add,
             recents_clear,

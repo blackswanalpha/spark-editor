@@ -4,7 +4,7 @@
    and rich-editor slash menu.
    ============================================================ */
 import * as RP from "@radix-ui/react-popover";
-import { motion, AnimatePresence } from "@motion/index";
+import { motion } from "@motion/index";
 import { popoverVariants } from "@motion/index";
 import "./Popover.css";
 
@@ -17,25 +17,23 @@ export function PopoverContent({
 }: React.ComponentProps<typeof RP.Content> & { children: React.ReactNode }) {
   return (
     <RP.Portal>
-      <AnimatePresence>
-        <RP.Content
-          asChild
-          side={side}
-          align={align}
-          sideOffset={sideOffset}
-          {...rest}
+      <RP.Content
+        asChild
+        side={side}
+        align={align}
+        sideOffset={sideOffset}
+        {...rest}
+      >
+        <motion.div
+          className={["popover", className].filter(Boolean).join(" ")}
+          variants={popoverVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
         >
-          <motion.div
-            className={["popover", className].filter(Boolean).join(" ")}
-            variants={popoverVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-          >
-            {children}
-          </motion.div>
-        </RP.Content>
-      </AnimatePresence>
+          {children}
+        </motion.div>
+      </RP.Content>
     </RP.Portal>
   );
 }

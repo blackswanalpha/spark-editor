@@ -1,0 +1,152 @@
+/* ============================================================
+   sparkEditor · src/shell/TerminalPanel.css
+   Independent floating terminal — main window stays active
+   ============================================================ */
+@import "@xterm/xterm/css/xterm.css";
+
+.term--floating {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  background: #1c2027;
+  border: 1px solid #2d333d;
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.45), 0 4px 16px rgba(0,0,0,0.35);
+  overflow: hidden;
+  z-index: var(--z-modal);
+  animation: termIn 180ms var(--ease);
+  /* allow interaction without blocking main window — no overlay */
+}
+
+@keyframes termIn { from { opacity: 0; transform: scale(0.98) } to { opacity: 1; transform: scale(1) } }
+
+.term__header {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px 0 14px;
+  background: #232830;
+  border-bottom: 1px solid #2d333d;
+  color: #a2abb8;
+  flex-shrink: 0;
+}
+
+.term__header--draggable { cursor: grab; touch-action: none; user-select: none; }
+.term__header--draggable:active { cursor: grabbing; }
+
+.term__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #e6e9ee;
+  min-width: 0;
+}
+
+.term__cwd {
+  font-family: var(--font-code);
+  font-weight: 400;
+  font-size: 11px;
+  color: #6c7686;
+  max-width: 28vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.term__badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6d9bff;
+  background: #263450;
+  border: 1px solid #3a4150;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.term__actions { display: inline-flex; align-items: center; gap: 6px; }
+
+.term__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #3a4150;
+  background: #2d333d;
+  color: #e6e9ee;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.term__btn:hover { background: #353c48; }
+
+.term__icon-btn {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px;
+  background: transparent; color: #a2abb8; cursor: pointer;
+}
+.term__icon-btn:hover { background: #2d333d; color: #e6e9ee; }
+
+.term__holder {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: #1c2027;
+  padding: 6px;
+  overflow: hidden;
+}
+
+.term__xterm {
+  flex: 1;
+  min-height: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1c2027;
+}
+
+.term__popped-note {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  color: #a2abb8;
+  font-size: 13px;
+}
+.term__popped-title { color: #e6e9ee; font-weight: 600; }
+.term__popped-sub { color: #6c7686; font-size: 11px; margin-top: 2px; max-width: 36ch; }
+
+.term__footer {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  background: #232830;
+  border-top: 1px solid #2d333d;
+  color: #6c7686;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.term__hint { opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.term__resizeHandle {
+  position: absolute;
+  right: 0; bottom: 0;
+  width: 16px; height: 16px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, #3a4150 50%, #3a4150 55%, transparent 55%, transparent 65%, #3a4150 65%, #3a4150 70%, transparent 70%);
+  border-radius: 0 0 12px 0;
+  opacity: 0.8;
+}
+.term__resizeHandle:hover { opacity: 1; }
