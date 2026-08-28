@@ -1,0 +1,177 @@
+name: Develop
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version to cut from develop (e.g. 0.2.1). Leave empty to just build."
+        required: false
+        type: string
+      bump:
+        description: "Bump type if release_version empty"
+        required: false
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # Exactly the same gate as CI — required for branch protection
+  ci:
+    name: ci (typecheck • lint • test • build • cargo check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: package-lock.json }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: clippy }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: "src-tauri -> target" }
+      - name: Install Tauri deps (Linux)
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -W clippy::pedantic -A clippy::module_name_repetitions || true
+
+  # Build a deb/AppImage artifact for manual QA from develop (no signing required)
+  build-develop-artifact:
+    name: build-develop (${{ matrix.platform }})
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: ci
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            bundle: deb
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: package-lock.json }
+      - run: npm ci
+      - run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: "src-tauri -> target" }
+      - name: Install Tauri deps (Linux)
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      # Build without updater artifacts (no signing needed for develop QA)
+      - name: Build Tauri (develop, no updater sig)
+        run: |
+          jq '.bundle.createUpdaterArtifacts = false' src-tauri/tauri.conf.json > /tmp/tauri.json && mv /tmp/tauri.json src-tauri/tauri.conf.json
+          npm run tauri build -- --bundles ${{ matrix.bundle }} --verbose
+      - name: Upload develop bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: sparkEditor-develop-${{ matrix.platform }}-${{ github.sha }}
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: ignore
+
+  # Manual release cutter: bumps version, creates release/* branch, opens PR to main
+  cut-release:
+    name: cut-release
+    if: github.event_name == 'workflow_dispatch' && inputs.release_version != ''
+    runs-on: ubuntu-latest
+    needs: ci
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, token: ${{ secrets.GITHUB_TOKEN }} }
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Bump version and create release branch
+        env:
+          VERSION: ${{ inputs.release_version }}
+        run: |
+          set -e
+          VERSION=$(echo "$VERSION" | sed 's/^v//')
+          echo "Cutting release $VERSION"
+          git checkout develop
+          git pull --ff-only origin develop
+          BRANCH="release/$VERSION"
+          if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+            echo "Branch $BRANCH already exists"
+            exit 1
+          fi
+          git checkout -b "$BRANCH"
+          # Bump package.json
+          jq --arg v "$VERSION" '.version = $v' package.json > /tmp/p.json && mv /tmp/p.json package.json
+          # Bump Cargo.toml (only package version, not deps)
+          sed -i "0,/version = \".*\"/s//version = \"$VERSION\"/" src-tauri/Cargo.toml
+          # Bump tauri.conf.json
+          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > /tmp/t.json && mv /tmp/t.json src-tauri/tauri.conf.json
+          # Update changelog placeholder
+          mkdir -p changelog
+          cat > "changelog/$VERSION.md" <<EOF
+          # $VERSION — $(date +%Y-%m-%d)
+          Automated cut from develop (\`$BRANCH\`).
+
+          See CHANGELOG.md for details.
+          EOF
+          git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json "changelog/$VERSION.md"
+          git commit -m "chore: bump to $VERSION"
+          git push -u origin "$BRANCH"
+      - name: Open PR to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(echo "${{ inputs.release_version }}" | sed 's/^v//')
+          gh pr create --base main --head "release/$VERSION" --title "release: $VERSION" --body "Automated release cut from develop via \`develop.yml\` workflow.
+
+          - Version bumped in package.json/Cargo.toml/tauri.conf.json to $VERSION
+          - Branch: release/$VERSION
+          - After merge: \`git tag -a v$VERSION -m v$VERSION && git push origin v$VERSION\` will trigger \`release.yml\` (signed OTA).
+
+          Check CI gate ✓ before merging." || echo "PR may already exist"
+
+  # Helper: if release_version empty but bump set, compute next version and reuse cut-release
+  auto-bump:
+    name: auto-bump (patch/minor/major)
+    if: github.event_name == 'workflow_dispatch' && inputs.release_version == ''
+    runs-on: ubuntu-latest
+    needs: ci
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute next version
+        id: ver
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          CUR=$(jq -r .version package.json)
+          echo "current=$CUR"
+          IFS='.' read -r MA MI PA <<< "$CUR"
+          case "$BUMP" in
+            major) MA=$((MA+1)); MI=0; PA=0 ;;
+            minor) MI=$((MI+1)); PA=0 ;;
+            patch) PA=$((PA+1)); ;;
+          esac
+          NEXT="$MA.$MI.$PA"
+          echo "next=$NEXT"
+          echo "next=$NEXT" >> $GITHUB_OUTPUT
+      - name: Trigger cut-release with computed version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run develop.yml --ref develop -f release_version="${{ steps.ver.outputs.next }}"
+          echo "Triggered develop.yml with release_version=${{ steps.ver.outputs.next }}"
