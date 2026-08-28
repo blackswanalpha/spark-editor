@@ -73,6 +73,12 @@ export async function checkForUpdates(opts?: {
       if (!opts?.silent) opts?.onInfo?.("No updates", "No release published yet");
       return false;
     }
+    // Platform not in latest.json (e.g. linux artifact missing from release).
+    // Tauri throws: None of the fallback platforms `["linux-x86_64"]` were found...
+    if (msg.includes("fallback platforms") || msg.includes("platforms` object")) {
+      if (!opts?.silent) opts?.onInfo?.("No updates", "No update available for this platform yet");
+      return false;
+    }
     opts?.onError?.("Update check failed", msg);
     return false;
   }
