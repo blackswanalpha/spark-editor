@@ -9,14 +9,36 @@
      - Toolbar (new file / refresh / collapse / show hidden)
      - Loader row, empty / error row
    ============================================================ */
-import { useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "@motion/index";
 import { Icon } from "@ui/Icon";
+import { LangLogo } from "@ui/LangLogo";
 import { Spinner as Loader } from "@ui/Loader";
+import { Dialog, DialogFooter } from "@ui/Dialog";
+import { Input } from "@ui/Input";
+import { Button } from "@ui/Button";
+import { Popover, PopoverTrigger, PopoverContent } from "@ui/Popover";
 import { useExplorer, type ExplorerNode } from "@store/explorer";
-import { splitPath } from "@bridge/commands";
-import { fileIconFor } from "@editor/CodeEditor/languages";
+import { splitPath, openFolderDialog } from "@bridge/commands";
+import { langIdOf } from "@editor/CodeEditor/languages";
 import "./SideBar.css";
+
+/* Lightweight error boundary for the file tree — satisfies React's
+   "Consider adding an error boundary" suggestion and prevents a single
+   bad icon from crashing the whole explorer. */
+class TreeErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(err: unknown) {
+    console.error("[SideBar] Tree render error:", err);
+  }
+  render() {
+    if (this.state.hasError) {
+      return <div className="tree-empty">Explorer error — see console</div>;
+    }
+    return this.props.children;
+  }
+}
 
 export interface RecentsEntry { path: string; name: string; }
 
@@ -130,6 +152,7 @@ function ExplorerPane({
       root={root}
       onOpen={onOpen}
       activePath={activePath}
+      onRequestOpenFolder={onRequestOpenFolder}
       onInfo={onInfo}
       onError={onError}
     />
@@ -138,15 +161,15 @@ function ExplorerPane({
 
 /* ---------- Explorer (toolbar + tree) ---------- */
 function Explorer({
-  root, onOpen, activePath, onInfo, onError,
+  root, onOpen, activePath, onRequestOpenFolder, onInfo, onError,
 }: {
   root: string;
   onOpen: (path: string) => void;
   activePath?: string;
+  onRequestOpenFolder?: () => void;
   onInfo?: (message: string) => void;
   onError?: (message: string, detail?: string) => void;
 }) {
-  // Single map selector — re-renders only when the relevant slice changes.
   const slice = useExplorer((s) => ({
     expanded: s.expanded,
     children: s.children,
@@ -154,40 +177,109 @@ function Explorer({
     errors: s.errors,
     showHidden: s.showHidden,
     selectedPath: s.selectedPath,
+    history: s.history,
+    historyIndex: s.historyIndex,
   }));
 
   const segments = splitPath(root);
   const title = segments[segments.length - 1] || root;
+  const canGoBack = slice.historyIndex > 0;
+  const canGoForward = slice.historyIndex >= 0 && slice.historyIndex < slice.history.length - 1;
 
-  const onNewFile = async () => {
-    const raw = window.prompt(`New file in ${root}`, "untitled.md");
-    if (!raw) return;
-    const name = raw.trim();
-    if (!name) return;
-    const res = await useExplorer.getState().createFile(root, name);
-    if (res.ok) onInfo?.(`Created ${name}`);
-    else onError?.("Create file failed", res.error);
-  };
+  // create bubble + dialog state
+  const [bubbleOpen, setBubbleOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createKind, setCreateKind] = useState<"file" | "folder">("file");
+
+  const openCreate = useCallback((kind: "file" | "folder") => {
+    setBubbleOpen(false);
+    setCreateKind(kind);
+    setCreateOpen(true);
+  }, []);
 
   return (
     <div className="explorer" aria-label="File explorer">
       <div className="explorer__header">
-        <span className="explorer__title" title={root}>{title}</span>
-        <span className="explorer__actions">
+        <div className="explorer__nav" aria-label="Navigation">
           <button
             type="button"
             className="icon-btn"
-            aria-label="New file"
-            title="New file"
-            onClick={onNewFile}
+            aria-label="Go back"
+            title={canGoBack ? `Back to ${slice.history[slice.historyIndex - 1]}` : "Go back"}
+            disabled={!canGoBack}
+            onClick={() => { void useExplorer.getState().goBack(); }}
           >
-            <Icon name="plus" size={14} />
+            <Icon name="arrow-left" size={14} />
           </button>
           <button
             type="button"
             className="icon-btn"
+            aria-label="Go forward"
+            title={canGoForward ? `Forward to ${slice.history[slice.historyIndex + 1]}` : "Go forward"}
+            disabled={!canGoForward}
+            onClick={() => { void useExplorer.getState().goForward(); }}
+          >
+            <Icon name="arrow-right" size={14} />
+          </button>
+          <span className="explorer__title" title={root}>{title}</span>
+        </div>
+        <span className="explorer__actions">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Change folder"
+            title="Change folder"
+            onClick={() => onRequestOpenFolder?.()}
+          >
+            <Icon name="folder-open" size={14} />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Up to parent folder"
+            title="Up to parent folder"
+            disabled={root === "/"}
+            onClick={() => { void useExplorer.getState().goUp(); }}
+          >
+            <Icon name="arrow-up" size={14} />
+          </button>
+          {/* + as bubble (popover) for create file/folder */}
+          <Popover open={bubbleOpen} onOpenChange={setBubbleOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="New file or folder"
+                title="New file or folder"
+              >
+                <Icon name="plus" size={14} />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={6} className="explorer__bubble">
+              <div className="explorer__bubble-title">Create new</div>
+              <button
+                type="button"
+                className="explorer__bubble-item"
+                onClick={() => openCreate("file")}
+              >
+                <Icon name="file-plus" size={16} />
+                <span>New File…</span>
+              </button>
+              <button
+                type="button"
+                className="explorer__bubble-item"
+                onClick={() => openCreate("folder")}
+              >
+                <Icon name="folder-plus" size={16} />
+                <span>New Folder…</span>
+              </button>
+            </PopoverContent>
+          </Popover>
+          <button
+            type="button"
+            className="icon-btn"
             aria-label="Refresh explorer"
-            title="Refresh"
+            title="Refresh explorer"
             onClick={() => { void useExplorer.getState().refresh(); }}
           >
             <Icon name="refresh" size={14} />
@@ -204,15 +296,26 @@ function Explorer({
           <button
             type="button"
             className={`icon-btn ${slice.showHidden ? "is-on" : ""}`}
-            aria-label="Show hidden files"
+            aria-label={slice.showHidden ? "Hide hidden files" : "Show hidden files"}
             aria-pressed={slice.showHidden}
-            title="Show hidden"
+            title={slice.showHidden ? "Hide hidden files" : "Show hidden files"}
             onClick={() => useExplorer.getState().toggleShowHidden()}
           >
-            <Icon name="file" size={14} />
+            <Icon name={slice.showHidden ? "eye" : "eye-slash"} size={14} />
           </button>
         </span>
       </div>
+
+      <CreateDialog
+        open={createOpen}
+        kind={createKind}
+        onOpenChange={setCreateOpen}
+        root={root}
+        selectedPath={slice.selectedPath}
+        explorerChildren={slice.children}
+        onInfo={onInfo}
+        onError={onError}
+      />
 
       <Tree
         root={root}
@@ -224,6 +327,137 @@ function Explorer({
   );
 }
 
+function CreateDialog({
+  open, kind, onOpenChange, root, selectedPath, explorerChildren, onInfo, onError,
+}: {
+  open: boolean;
+  kind: "file" | "folder";
+  onOpenChange: (o: boolean) => void;
+  root: string;
+  selectedPath: string | null;
+  explorerChildren: Map<string, ExplorerNode[]>;
+  onInfo?: (m: string) => void;
+  onError?: (m: string, d?: string) => void;
+}) {
+  const isFile = kind === "file";
+  const defaultDir = useMemo(() => {
+    if (selectedPath) {
+      // if selected is a dir and known, use it; else use its parent
+      const sel = selectedPath;
+      // heuristic: if sel is in children map or has children, treat as dir_candidate
+      const isDirKnown = explorerChildren.has(sel);
+      if (isDirKnown) return sel;
+      // if selected is a file, use its parent
+      const idx = Math.max(sel.lastIndexOf("/"), sel.lastIndexOf("\\"));
+      if (idx > 0) return sel.slice(0, idx) || "/";
+      return root;
+    }
+    return root;
+  }, [selectedPath, explorerChildren, root]);
+
+  const [targetDir, setTargetDir] = useState(defaultDir);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const nameRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setTargetDir(defaultDir);
+      setName("");
+      setBusy(false);
+      const t = window.setTimeout(() => nameRef.current?.focus(), 60);
+      return () => window.clearTimeout(t);
+    }
+  }, [open, defaultDir, kind]);
+
+  const confirm = useCallback(async () => {
+    const trimmedName = name.trim();
+    const trimmedDir = targetDir.trim() || root;
+    if (!trimmedName) return;
+    if (trimmedName.includes("/") || trimmedName.includes("\\")) {
+      onError?.("Invalid name", "Name must not contain / or \\");
+      return;
+    }
+    setBusy(true);
+    const api = useExplorer.getState();
+    const res = isFile
+      ? await api.createFile(trimmedDir, trimmedName)
+      : await api.createFolder(trimmedDir, trimmedName);
+    setBusy(false);
+    if (res.ok) {
+      onInfo?.(`${isFile ? "Created file" : "Created folder"} ${trimmedName} in ${trimmedDir}`);
+      onOpenChange(false);
+      // ensure refresh so newly created entry animates in and is visible
+      void api.refresh(trimmedDir);
+    } else {
+      onError?.(`${isFile ? "Create file" : "Create folder"} failed`, res.error);
+    }
+  }, [name, targetDir, root, isFile, onInfo, onError, onOpenChange]);
+
+  const onBrowse = useCallback(async () => {
+    try {
+      const picked = await openFolderDialog();
+      if (picked) setTargetDir(picked);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const fullPreview = `${targetDir.replace(/\/+$/, "")}/${name.trim() || (isFile ? "untitled" : "new-folder")}`;
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isFile ? "New File" : "New Folder"}
+      description={isFile ? "Create a new file in the selected directory." : "Create a new folder in the selected directory."}
+      size="md"
+    >
+      <div className="create-dialog" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void confirm(); } }}>
+        <div className="create-dialog__field">
+          <label className="create-dialog__label">Location</label>
+          <div className="create-dialog__row">
+            <Input
+              value={targetDir}
+              onChange={(e) => setTargetDir(e.target.value)}
+              placeholder={root}
+              leadingIcon="folder"
+              inputSize="md"
+            />
+            <Button variant="secondary" size="md" icon="folder-open" onClick={onBrowse} type="button">
+              Browse…
+            </Button>
+          </div>
+          <span className="create-dialog__hint">Current: <code>{root}</code> {selectedPath ? <>· selected: <code>{selectedPath}</code></> : null}</span>
+        </div>
+        <div className="create-dialog__field">
+          <label className="create-dialog__label">{isFile ? "File name" : "Folder name"}</label>
+          <Input
+            ref={nameRef as any}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={isFile ? "untitled.md" : "new-folder"}
+            leadingIcon={isFile ? "file-plus" : "folder-plus"}
+            inputSize="md"
+          />
+          <span className="create-dialog__preview" title={fullPreview}>{fullPreview}</span>
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
+        <Button
+          variant="primary"
+          icon={isFile ? "file-plus" : "folder-plus"}
+          onClick={() => { void confirm(); }}
+          disabled={!name.trim() || busy}
+        >
+          {isFile ? "Create file" : "Create folder"}
+        </Button>
+      </DialogFooter>
+    </Dialog>
+  );
+}
+
 /* ---------- Tree ---------- */
 type Slice = {
   expanded: Set<string>;
@@ -232,6 +466,8 @@ type Slice = {
   errors: Map<string, string>;
   showHidden: boolean;
   selectedPath: string | null;
+  history: string[];
+  historyIndex: number;
 };
 
 function Tree({
@@ -266,7 +502,10 @@ function Tree({
     const curExpanded = cur?.getAttribute("aria-expanded") === "true";
     const moveTo = (row: HTMLButtonElement) => { row.focus(); setFocusedPath(row.dataset.path ?? null); };
 
-    if (e.key === "ArrowDown" && idx < rows.length - 1) {
+    if (e.altKey && e.key === "ArrowUp") {
+      e.preventDefault();
+      if (root !== "/") void useExplorer.getState().goUp();
+    } else if (e.key === "ArrowDown" && idx < rows.length - 1) {
       e.preventDefault(); moveTo(rows[idx + 1]);
     } else if (e.key === "ArrowUp" && idx > 0) {
       e.preventDefault(); moveTo(rows[idx - 1]);
@@ -312,15 +551,17 @@ function Tree({
         <Icon name="folder-open" size={14} />
         <span className="tree-root__name">{splitPath(root).pop() || root}</span>
       </div>
-      <div role="tree" aria-label="Files" tabIndex={-1} style={{ outline: "none" }}>
-        <TreeLevel
-          dirPath={root}
-          depth={1}
-          onOpen={onOpen}
-          activePath={activePath}
-          slice={slice}
-        />
-      </div>
+      <TreeErrorBoundary>
+        <div role="tree" aria-label="Files" tabIndex={-1} style={{ outline: "none" }}>
+          <TreeLevel
+            dirPath={root}
+            depth={1}
+            onOpen={onOpen}
+            activePath={activePath}
+            slice={slice}
+          />
+        </div>
+      </TreeErrorBoundary>
     </div>
   );
 }
@@ -414,7 +655,11 @@ function TreeRow({
           <Icon name="chevron-right" size={12} />
         </span>
         <span className="tree-item__icon" aria-hidden>
-          <Icon name={node.isDir ? "folder" : fileIconFor(node.name)} size={14} />
+          {node.isDir ? (
+            <Icon name="folder" size={14} />
+          ) : (
+            <FileIcon name={node.name} />
+          )}
         </span>
         <span className="tree-item__name">{node.name}</span>
       </button>
@@ -431,6 +676,24 @@ function TreeRow({
       )}
     </>
   );
+}
+
+function FileIcon({ name }: { name: string }) {
+  let lid: string | undefined;
+  try {
+    lid = langIdOf(name);
+  } catch {
+    lid = undefined;
+  }
+  if (lid) {
+    // LangLogo itself is now defensive; still guard with error boundary fallback
+    try {
+      return <LangLogo langId={lid} size={14} />;
+    } catch {
+      return <Icon name="file" size={14} />;
+    }
+  }
+  return <Icon name="file" size={14} />;
 }
 
 /* ---------- helpers ---------- */

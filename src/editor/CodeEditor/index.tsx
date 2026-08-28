@@ -58,6 +58,7 @@ import {
 import { useDocs } from "@store/documents";
 import { useTheme } from "@theme/ThemeProvider";
 import { Button } from "@ui/Button";
+import { LangLogo } from "@ui/LangLogo";
 import "../editor.css";
 import "./CodeEditor.css";
 
@@ -188,6 +189,26 @@ export function CodeEditor({ docId, onCursor }: Props) {
           { tag: tagExtension.typeName, color: "var(--syn-type)" },
           { tag: tagExtension.tagName, color: "var(--syn-tag)" },
           { tag: tagExtension.attributeName, color: "var(--syn-attr)" },
+          { tag: tagExtension.atom, color: "var(--syn-keyword)" },
+          { tag: tagExtension.operator, color: "var(--syn-tag)" },
+          { tag: tagExtension.punctuation, color: "var(--text)" },
+          { tag: tagExtension.meta, color: "var(--syn-comment)", fontStyle: "italic" },
+          { tag: tagExtension.invalid, color: "var(--danger)", textDecoration: "underline wavy" },
+          { tag: tagExtension.heading, color: "var(--syn-keyword)", fontWeight: "700" },
+          { tag: tagExtension.propertyName, color: "var(--syn-attr)" },
+          { tag: tagExtension.modifier, color: "var(--syn-keyword)" },
+          { tag: tagExtension.bool, color: "var(--syn-keyword)" },
+          { tag: tagExtension.null, color: "var(--syn-keyword)" },
+          { tag: tagExtension.regexp, color: "var(--syn-regex)" },
+          { tag: tagExtension.escape, color: "var(--syn-regex)" },
+          { tag: tagExtension.url, color: "var(--syn-func)", textDecoration: "underline" },
+          { tag: tagExtension.emphasis, fontStyle: "italic" },
+          { tag: tagExtension.strong, fontWeight: "700" },
+          { tag: tagExtension.link, color: "var(--syn-func)", textDecoration: "underline" },
+          { tag: tagExtension.strikethrough, textDecoration: "line-through" },
+          { tag: tagExtension.inserted, color: "var(--syn-string)" },
+          { tag: tagExtension.deleted, color: "var(--syn-tag)" },
+          { tag: tagExtension.changed, color: "var(--syn-keyword)" },
         ])),
         keymap.of([
           ...defaultKeymap,
@@ -382,7 +403,10 @@ export function CodeEditor({ docId, onCursor }: Props) {
         </span>
       </div>
       <div className="code-editor__body">
-        <span className="code-editor__langchip" aria-hidden>{langLabel}</span>
+        <span className="code-editor__langchip" aria-hidden>
+          {currentLangId ? <LangLogo langId={currentLangId} size={14} /> : null}
+          <span>{langLabel}</span>
+        </span>
         <div ref={ref} className="editor editor--code" />
       </div>
     </div>

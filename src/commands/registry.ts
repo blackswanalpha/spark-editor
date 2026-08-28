@@ -6,11 +6,9 @@
 import { useDocs, type DocMode } from "@store/documents";
 import {
   readFile,
-  writeFile,
   recentsAdd,
   openFileDialog,
   openFolderDialog,
-  saveFileDialog,
   pickMode,
 } from "@bridge/commands";
 
@@ -95,7 +93,7 @@ export function buildCommands(): CommandSpec[] {
       icon: "mode-code",
       run: () => {
         const a = active(); if (!a) return;
-        const order: DocMode[] = ["markdown", "rich", "code"];
+        const order: DocMode[] = ["markdown", "rich", "code", "html", "svg"];
         const next = order[(order.indexOf(a.mode) + 1) % order.length];
         useDocs.getState().setMode(a.id, next);
       },
@@ -104,6 +102,10 @@ export function buildCommands(): CommandSpec[] {
       run: runIfActive((a) => { useDocs.getState().setMode(a.id, "markdown"); }) },
     { id: "view.rich",     title: "Switch to Rich Text", category: "View", icon: "mode-rich",
       run: runIfActive((a) => { useDocs.getState().setMode(a.id, "rich"); }) },
+    { id: "view.html",     title: "Switch to HTML Preview", category: "View", icon: "mode-html",
+      run: runIfActive((a) => { useDocs.getState().setMode(a.id, "html"); }) },
+    { id: "view.svg",      title: "Switch to SVG Editor", category: "View", icon: "mode-svg",
+      run: runIfActive((a) => { useDocs.getState().setMode(a.id, "svg"); }) },
     { id: "view.code",     title: "Switch to Code",      category: "View", icon: "mode-code",
       run: runIfActive((a) => { useDocs.getState().setMode(a.id, "code"); }) },
 
@@ -147,10 +149,17 @@ export function buildCommands(): CommandSpec[] {
       icon: "save", shortcut: mod("S"),
       run: async () => {
         const a = active(); if (!a) return;
-        const path = a.path || `/untitled-${a.id}.md`;
-        await writeFile(path, a.raw);
-        useDocs.getState().markClean(a.id);
-        await recentsAdd(path);
+        if (!a.path) {
+          window.dispatchEvent(new CustomEvent("spark:saveas:open", { detail: { docId: a.id } }));
+          return;
+        }
+        const result = await useDocs.getState().saveDocument(a.id);
+        if (result.ok) {
+          window.dispatchEvent(new CustomEvent("spark:toast:success", { detail: { title: "File saved" } }));
+        } else if (result.reason === "error") {
+          const msg = result.error instanceof Error ? result.error.message : String(result.error ?? "Unknown error");
+          window.dispatchEvent(new CustomEvent("spark:toast:error", { detail: { title: "Save failed", body: msg } }));
+        }
       },
     },
     {
@@ -158,13 +167,13 @@ export function buildCommands(): CommandSpec[] {
       icon: "save", shortcut: mod("Shift+S"),
       run: async () => {
         const a = active(); if (!a) return;
-        const path = await saveFileDialog({ defaultPath: a.path ?? a.name });
-        if (!path) return;
-        await writeFile(path, a.raw);
-        useDocs.getState().setPath(a.id, path);
-        useDocs.getState().setName(a.id, path.split("/").pop() || a.name);
-        useDocs.getState().markClean(a.id);
-        await recentsAdd(path);
+        const result = await useDocs.getState().saveDocumentAs(a.id);
+        if (result.ok) {
+          window.dispatchEvent(new CustomEvent("spark:toast:success", { detail: { title: "File saved" } }));
+        } else if (result.reason === "error") {
+          const msg = result.error instanceof Error ? result.error.message : String(result.error ?? "Unknown error");
+          window.dispatchEvent(new CustomEvent("spark:toast:error", { detail: { title: "Save failed", body: msg } }));
+        }
       },
     },
     {
@@ -176,13 +185,21 @@ export function buildCommands(): CommandSpec[] {
           const text = await readFile(a.path);
           useDocs.getState().setRaw(a.id, text);
           useDocs.getState().markClean(a.id);
-        } catch {}
+        } catch (e: unknown) {
+          const err = e as { kind?: unknown };
+          const msg = err?.kind != null
+            ? String(err.kind)
+            : e instanceof Error
+              ? e.message
+              : String(e ?? "Unknown error");
+          window.dispatchEvent(new CustomEvent("spark:toast:error", { detail: { title: "Revert failed", body: msg } }));
+        }
       },
     },
     {
       id: "tab.close", title: "Close Tab", category: "File",
       icon: "close", shortcut: mod("W"),
-      run: () => { const a = active(); if (a) useDocs.getState().close(a.id); },
+      run: () => { const a = active(); if (a) window.dispatchEvent(new CustomEvent("spark:tab:close:request", { detail: { id: a.id } })); },
     },
 
     { id: "edit.undo", title: "Undo", category: "Edit", icon: "undo",  shortcut: mod("Z"),
@@ -292,7 +309,7 @@ export function buildCommands(): CommandSpec[] {
     {
       id: "window.close", title: "Close Window", category: "Window",
       icon: "close", shortcut: mod("Shift+W"),
-      run: () => { window.dispatchEvent(new CustomEvent("spark:window:close")); },
+      run: () => { window.dispatchEvent(new CustomEvent("spark:window:close:request")); },
     },
 
     /* ---------- Help ---------- */
@@ -315,6 +332,12 @@ export function buildCommands(): CommandSpec[] {
       id: "help.reportIssue", title: "Report Issue", category: "Help",
       icon: "alert",
       run: () => { window.dispatchEvent(new CustomEvent("spark:help:reportIssue", { detail: { silent: true } })); },
+    },
+    {
+      id: "help.checkForUpdates", title: "Check for Updates…", category: "Help",
+      icon: "refresh",
+      keywords: ["ota", "update", "updater"],
+      run: () => { window.dispatchEvent(new CustomEvent("spark:help:checkForUpdates")); },
     },
     {
       id: "help.devtools", title: "Toggle Developer Tools", category: "Help",

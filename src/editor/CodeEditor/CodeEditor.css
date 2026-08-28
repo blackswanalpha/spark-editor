@@ -99,6 +99,7 @@
   z-index: 5;
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   height: 18px;
   padding: 0 8px;
   border-radius: 999px;
@@ -111,4 +112,19 @@
   border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
   pointer-events: none;
   user-select: none;
+}
+
+.code-editor__langchip .lang-logo {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+  opacity: 0.95;
+}
+
+.lang-logo {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  line-height: 0;
+  opacity: 0.95;
 }
