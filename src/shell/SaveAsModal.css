@@ -1,0 +1,60 @@
+/* ============================================================
+   sparkEditor · src/shell/SaveAsModal.css
+   Styles for the controlled "Save As…" dialog.
+   ============================================================ */
+
+.saveas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  width: min(540px, 100%);
+}
+
+.saveas__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.saveas__row > .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.saveas__row > .btn {
+  flex: 0 0 auto;
+}
+
+.saveas__error {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: var(--size-sm, 12px);
+  color: var(--danger, #c62828);
+  background: color-mix(in srgb, var(--danger, #c62828) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger, #c62828) 35%, transparent);
+  border-radius: var(--radius-sm, 5px);
+  line-height: 1.4;
+}
+
+.saveas__hint {
+  margin: 0;
+  font-size: var(--size-sm, 12px);
+  color: var(--text-muted, #5a6270);
+}
+
+.saveas__hint strong {
+  color: var(--text, #24292f);
+  font-weight: 600;
+}
+
+@media (max-width: 520px) {
+  .saveas__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .saveas__row > .btn {
+    width: 100%;
+  }
+}

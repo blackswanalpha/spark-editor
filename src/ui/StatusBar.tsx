@@ -4,10 +4,11 @@
    ============================================================ */
 import "./StatusBar.css";
 
+import type { DocMode } from "@store/documents";
 export function StatusBar({
   mode, language, encoding, line, col, dirty, onModeClick,
 }: {
-  mode: "markdown" | "rich" | "code";
+  mode: DocMode;
   language?: string;
   encoding?: string;
   line: number;

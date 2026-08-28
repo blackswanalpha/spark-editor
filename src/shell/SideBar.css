@@ -10,6 +10,8 @@
   flex-direction: column;
   width: 260px;
   min-width: 200px;
+  height: 100%;
+  flex: 1;
   background: var(--surface-2);
   border-right: 1px solid var(--border);
   overflow: hidden;
@@ -38,8 +40,32 @@
 .sidebar__tab:hover { color: var(--text); background: var(--surface-3); }
 .sidebar__tab.is-active { color: var(--text); background: var(--surface-3); }
 
-.sidebar__body { flex: 1; overflow: auto; padding: 0; min-height: 0; }
-.sidebar__list { list-style: none; padding: 0; margin: 0; }
+.sidebar__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  min-height: 0;
+}
+.sidebar__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Recents tab is a plain <ul> — it should scroll as a whole */
+ul.sidebar__list {
+  display: block;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
 .sidebar__empty { padding: 12px; color: var(--text-faint); font-size: var(--size-sm); }
 
 .sidebar__entry {
@@ -82,7 +108,9 @@
 .explorer {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
   font-size: var(--size-sm);
 }
 .explorer__header {
@@ -95,12 +123,87 @@
   color: var(--text-muted);
   user-select: none;
 }
+.explorer__nav {
+  display: inline-flex; align-items: center; gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
 .explorer__title {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: 50%;
+  flex: 1;
+  min-width: 0;
+  margin-left: 2px;
 }
-.explorer__actions { margin-left: auto; display: flex; gap: 2px; }
+.explorer__actions { margin-left: auto; display: flex; gap: 2px; flex: none; }
 .explorer__actions .icon-btn { width: 22px; height: 22px; }
+.explorer__nav .icon-btn { width: 22px; height: 22px; }
+.explorer__nav .icon-btn:disabled { opacity: 0.35; cursor: default; }
+
+/* bubble for + create */
+.explorer__bubble {
+  min-width: 170px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.explorer__bubble-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 6px 2px;
+}
+.explorer__bubble-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--size-sm);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.explorer__bubble-item:hover { background: var(--surface-3); color: var(--text); }
+.explorer__bubble-item:active { background: var(--accent-soft); }
+
+/* create dialog */
+.create-dialog { display: flex; flex-direction: column; gap: 14px; }
+.create-dialog__field { display: flex; flex-direction: column; gap: 6px; }
+.create-dialog__label {
+  font-size: var(--size-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.create-dialog__row { display: flex; gap: 8px; align-items: center; }
+.create-dialog__row .input { flex: 1; min-width: 0; }
+.create-dialog__hint {
+  font-size: var(--size-xs);
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+.create-dialog__hint code {
+  font-family: var(--font-code);
+  background: var(--surface-3);
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+.create-dialog__preview {
+  font-size: var(--size-xs);
+  color: var(--text-faint);
+  font-family: var(--font-code);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: var(--surface-3);
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+}
 
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -117,9 +220,13 @@
 
 .explorer__tree {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 0 var(--sp-1) var(--sp-2);
   outline: none;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 .explorer__tree:focus-visible { box-shadow: inset var(--focus-ring); border-radius: var(--radius-sm); }
 

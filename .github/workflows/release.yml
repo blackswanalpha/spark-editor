@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.2.0)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Tauri Linux deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Tauri build (createUpdaterArtifacts)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "sparkEditor v__VERSION__"
+          releaseBody: "See changelog/CHANGELOG.md for notes. OTA manifests (latest.json) are attached."
+          releaseDraft: false
+          prerelease: false
+          args: --verbose
+
+  # Aggregate after all platforms built: ensure latest.json is present
+  verify-ota:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check release assets contain latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          echo "Checking release $TAG for latest.json..."
+          gh release view "$TAG" --json assets --jq '.assets[].name' | tee /tmp/assets.txt
+          cat /tmp/assets.txt
+          if ! grep -q "latest.json" /tmp/assets.txt; then
+            echo "::error::latest.json not found in release assets — OTA will fail"
+            echo "Ensure TAURI_SIGNING_PRIVATE_KEY secret is set and createUpdaterArtifacts:true in tauri.conf.json"
+            exit 1
+          fi
+          echo "✓ latest.json present — OTA endpoint https://github.com/${{ github.repository }}/releases/latest/download/latest.json is live"

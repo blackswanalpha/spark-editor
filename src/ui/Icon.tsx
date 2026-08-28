@@ -39,13 +39,23 @@ import {
   Quotes,
   ArrowUUpRight,
   ArrowClockwise,
+  ArrowUp,
   CornersIn,
   FloppyDisk,
   MagnifyingGlass,
   Gear,
   Sidebar,
   ArrowUUpLeft,
+  ArrowLeft,
+  ArrowRight,
+  Eye,
+  EyeSlash,
+  EyeClosed,
+  FilePlus,
+  FolderPlus,
+  FolderSimplePlus,
 } from "@phosphor-icons/react";
+import { DartIcon } from "./DartIcon";
 
 type PhosphorComp = React.ComponentType<any>;
 
@@ -78,16 +88,29 @@ const PHOSPHOR_MAP: Record<string, PhosphorComp> = {
   Quotes,
   ArrowUUpRight,
   ArrowClockwise,
+  ArrowUp,
   CornersIn,
   FloppyDisk,
   MagnifyingGlass,
   Gear,
   Sidebar,
   ArrowUUpLeft,
+  ArrowLeft,
+  ArrowRight,
+  Eye,
+  EyeSlash,
+  EyeClosed,
+  FilePlus,
+  FolderPlus,
+  FolderSimplePlus,
 };
 
-/** Legacy → Phosphor component key in PHOSPHOR_MAP */
-const ALIAS: Record<string, keyof typeof PHOSPHOR_MAP> = {
+const CUSTOM_MAP: Record<string, PhosphorComp> = {
+  DartIcon,
+};
+
+/** Legacy → Phosphor (or custom) component key */
+const ALIAS: Record<string, keyof typeof PHOSPHOR_MAP | keyof typeof CUSTOM_MAP> = {
   alert: "Warning",
   bold: "TextB",
   check: "Check",
@@ -99,6 +122,7 @@ const ALIAS: Record<string, keyof typeof PHOSPHOR_MAP> = {
   divider: "Minus",
   dot: "Dot",
   "file-code": "FileCode",
+  "lang-dart": "DartIcon",
   file: "File",
   folder: "Folder",
   h1: "TextHOne",
@@ -113,11 +137,21 @@ const ALIAS: Record<string, keyof typeof PHOSPHOR_MAP> = {
   "mode-code": "Code",
   "mode-markdown": "MarkdownLogo",
   "mode-rich": "TextT",
+  "mode-html": "Code",
+  "mode-svg": "FileCode",
   open: "FolderOpen",
   plus: "Plus",
   quote: "Quotes",
   redo: "ArrowUUpRight",
   refresh: "ArrowClockwise",
+  "arrow-up": "ArrowUp",
+  "arrow-left": "ArrowLeft",
+  "arrow-right": "ArrowRight",
+  "eye": "Eye",
+  "eye-closed": "EyeClosed",
+  "eye-slash": "EyeSlash",
+  "file-plus": "FilePlus",
+  "folder-plus": "FolderPlus",
   restore: "CornersIn",
   save: "FloppyDisk",
   search: "MagnifyingGlass",
@@ -143,14 +177,14 @@ function kebabToPascal(kebab: string): string {
     .join("");
 }
 
-/** Resolve a `name` prop to a Phosphor component, if any. */
+/** Resolve a `name` prop to a Phosphor (or custom) component, if any. */
 function resolvePhosphor(name: string): PhosphorComp | undefined {
   // 1) Legacy alias
   const aliasKey = ALIAS[name];
-  if (aliasKey) return PHOSPHOR_MAP[aliasKey];
-  // 2) Direct Phosphor name (kebab-case → PascalCase)
+  if (aliasKey) return PHOSPHOR_MAP[aliasKey] ?? CUSTOM_MAP[aliasKey];
+  // 2) Direct Phosphor / custom name (kebab-case → PascalCase)
   const pascal = kebabToPascal(name);
-  return PHOSPHOR_MAP[pascal];
+  return PHOSPHOR_MAP[pascal] ?? CUSTOM_MAP[pascal];
 }
 
 /** Renders a Phosphor icon. Falls back to an empty 24×24 SVG if unresolved. */
@@ -189,4 +223,5 @@ export const Icon = forwardRef<SVGSVGElement, IconProps>(function Icon(
 export const ICON_SET = {
   legacy: Object.keys(ALIAS),
   phosphor: Object.keys(PHOSPHOR_MAP),
+  custom: Object.keys(CUSTOM_MAP),
 } as const;

@@ -37,6 +37,9 @@ export type WatchId = string;
 
 /* ---------- FS ---------- */
 export const readFile  = (path: string) => call<string>("read_file", { path });
+/** Read a file as base64 (binary-safe).  Falls back to text→base64 in browser mock. */
+export const readFileBase64 = (path: string) => call<string>("read_file_base64", { path });
+export const readFileBinary = (path: string) => readFileBase64(path);
 export const writeFile = (path: string, contents: string) => call<WriteReceipt>("write_file", { path, contents });
 export const stat      = (path: string) => call<FileStat>("stat", { path });
 export const readDir   = (path: string) => call<DirEntry[]>("read_dir", { path });
@@ -107,6 +110,11 @@ const MEMORY_FS = new Map<string, string>([
   ["/hello.ts",   `// hello.ts\nexport const greet = (n: string) => \`Hello, \${n}!\`;\n`],
   ["/README.md",  `# sparkEditor\n\nUnifies markdown, rich text, and code in one window.`],
   ["/docs/README.md", `# docs/\n\nReference and explanation documents.`],
+  ["/demo/index.html", `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="./style.css"><title>Demo</title></head><body><h1>Hello HTML preview</h1><p>This file is rendered via <code>HtmlPreview</code> without a server.</p><script src="./app.js"></script></body></html>`],
+  ["/demo/style.css", `body{font-family:Inter,sans-serif;padding:24px;color:#222}h1{color:#6c5ce7}`],
+  ["/demo/app.js", `console.log("bundled js works"); document.body.insertAdjacentHTML("beforeend","<p><em>js bundled ✓</em></p>")`],
+  ["/demo/logo.svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80"><rect x="10" y="10" width="180" height="60" rx="10" fill="#6c5ce7"/><text x="100" y="45" text-anchor="middle" fill="white" font-family="Inter" font-size="16">spark svg</text></svg>`],
+  ["/sample.svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600"><rect x="80" y="80" width="220" height="140" rx="12" fill="#6c5ce7" stroke="#2d3436" stroke-width="2"/><circle cx="520" cy="180" r="70" fill="#00cec9" stroke="#2d3436" stroke-width="2"/><text x="80" y="300" fill="#2d3436" font-size="20" font-family="Inter">Editable SVG — select, drag, recolour</text></svg>`],
 ]);
 
 /**
@@ -120,6 +128,7 @@ const MEMORY_DIRS: Set<string> = new Set<string>([
   "/docs/audits",
   "/docs/explanation",
   "/docs/reference",
+  "/demo",
 ]);
 
 function mock<T>(cmd: string, args?: any): T {
@@ -214,12 +223,18 @@ function mock<T>(cmd: string, args?: any): T {
       }
       return out as unknown as T;
     }
+    case "read_file_base64":
+    case "read_file_binary": {
+      const v = MEMORY_FS.get(args.path);
+      if (v === undefined) throw { kind: "NotFound", path: args.path };
+      try { return btoa(unescape(encodeURIComponent(v))) as unknown as T; } catch { return "" as unknown as T; }
+    }
     case "watch_path":
       return ("mock-" + Math.random().toString(36).slice(2)) as unknown as T;
     case "unwatch_path":
       return undefined as unknown as T;
     case "recents_get":
-      return ["/welcome.md", "/notes.md", "/hello.ts", "/README.md"] as unknown as T;
+      return ["/welcome.md", "/notes.md", "/hello.ts", "/README.md", "/demo/index.html", "/sample.svg"] as unknown as T;
     case "open_file":
     case "open_folder":
     case "save_file":
@@ -300,14 +315,18 @@ export function saveFileDialog(opts: SaveDialogOptions = {}): Promise<string | n
 /* ---------- Mode picker ---------- */
 /**
  * Pick an editor mode from a file path based on its extension.
+ *  - .svg  → "svg"
+ *  - .html / .htm → "html" (webview preview)
  *  - .md / .markdown → "markdown"
- *  - .html / .htm / .json → "rich"
+ *  - .json → "rich"
  *  - everything else → "code"
  */
-export function pickMode(path: string): "markdown" | "rich" | "code" {
+export function pickMode(path: string): "markdown" | "rich" | "code" | "html" | "svg" {
   const lower = path.toLowerCase();
+  if (lower.endsWith(".svg")) return "svg";
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
   if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
-  if (lower.endsWith(".html") || lower.endsWith(".htm") || lower.endsWith(".json")) return "rich";
+  if (lower.endsWith(".json")) return "rich";
   return "code";
 }
 

@@ -18,7 +18,14 @@
   overflow: hidden;
 }
 .app__menubar { grid-area: menubar; }
-.app__sidebar { grid-area: sidebar; overflow: hidden; }
+.app__sidebar {
+  grid-area: sidebar;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
 .app__main    { grid-area: main; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface-1); position: relative; }
 .app__status-wrap { display: contents; }
 .app__editor  { flex: 1; min-height: 0; display: flex; flex-direction: column; }
