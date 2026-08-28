@@ -35,7 +35,7 @@
     "publisher": "sparkEditor team",
     "category": "DeveloperTool",
     "shortDescription": "One window. Three modes. Markdown, rich, code.",
-    "longDescription": "sparkEditor — markdown, rich, code in one window. File is source of truth.",
+    "longDescription": "sparkEditor \u2014 markdown, rich, code in one window. File is source of truth.",
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",
@@ -68,7 +68,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "RWRaUWew/hvfdKkydjS7CiAtKLfGko9J9MNWe67IUqgn8RobeXHGPW0n",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0REYxQkZFQjA2NzUxNUEKUldSYVVXZXcvaHZmZEtreWRqUzdDaUF0S0xmR2tvOUo5TU5XZTY3SVVxZ244Um9iZVhIR1BXMG4K",
       "endpoints": [
         "https://github.com/blackswanalpha/spark-editor/releases/latest/download/latest.json"
       ]
