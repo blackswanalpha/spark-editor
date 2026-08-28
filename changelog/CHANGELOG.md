@@ -19,11 +19,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ---
 
+## [0.2.1] - 2026-08-28
+
+### Fixed
+- **OTA signing key** — previous `v0.2.0` key was generated without password and fails at build (`Missing comment in secret key`). Regenerated with password `spark-ota-2025`, `src-tauri/tauri.conf.json:71` pubkey now `RWRaUWew/hvfdKkydjS7CiAtKLfGko9J9MNWe67IUqgn8RobeXHGPW0n` (id `74DF1BFEB067515A`). `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets updated. Verified `cargo tauri signer sign` now succeeds.
+
+### Added
+- **Develop workflow** — `.github/workflows/develop.yml:1` — `develop` CI gate, `build-develop-artifact` (deb/AppImage for QA, `createUpdaterArtifacts:false`), and `cut-release` (`workflow_dispatch` → bumps `package.json`/`Cargo.toml`/`tauri.conf.json`, creates `release/*` branch + PR to `main`). `auto-bump` helper for patch/minor/major. See `gitflow.md`.
+
 ## [0.2.0] - 2026-08-28
 
 ### Added
 - **Launch & setup icons** — regenerated `src-tauri/icons/` via `cargo tauri icon` from `_master.png` (1024). Proper desktop assets: `32x32.png`, `64x64.png`, `128x128.png`, `128x128@2x.png` (256), `icon.png` (512), `icon.icns` (macOS, 64 KB), `icon.ico` (Windows). `src-tauri/tauri.conf.json:32` — `bundle.icon` updated, `publisher/category/shortDescription/longDescription` set, `createUpdaterArtifacts: true`, and `linux`/`windows`/`macOS` bundle targets wired so installers create correct desktop shortcuts / Start-Menu entries / `.desktop` files.
-- **OTA updates** — `tauri-plugin-updater` (Rust `src-tauri/src/lib.rs:275` + `@tauri-apps/plugin-updater` JS) + `capabilities/{default,desktop}.json` (`updater:default`, `updater:allow-check`, `updater:allow-download-and-install`, `process:allow-restart`). New `src/bridge/updater.ts:1` (`checkForUpdates()`, `checkForUpdatesOnBoot()`) — silent boot check (4 s delay) and manual **Help → Check for Updates…** (`src/commands/registry.ts:336` + `src/App.tsx:229`). `tauri.conf.json:plugins.updater` pubkey `RWQ8g3GffHCTjah…krV` and endpoint `https://github.com/blackswanalpha/spark-editor/releases/latest/download/latest.json`. CSP extended to GitHub.
+- **OTA updates** — `tauri-plugin-updater` (Rust `src-tauri/src/lib.rs:275` + `@tauri-apps/plugin-updater` JS) + `capabilities/{default,desktop}.json` (`updater:default`, `updater:allow-check`, `updater:allow-download-and-install`, `process:allow-restart`). New `src/bridge/updater.ts:1` (`checkForUpdates()`, `checkForUpdatesOnBoot()`) — silent boot check (4 s delay) and manual **Help → Check for Updates…** (`src/commands/registry.ts:336` + `src/App.tsx:229`). `tauri.conf.json:plugins.updater` pubkey `RWQ8g3GffHCTjah…krV` (now superseded in 0.2.1) and endpoint `https://github.com/blackswanalpha/spark-editor/releases/latest/download/latest.json`. CSP extended to GitHub.
 - **File explorer** — `src/shell/SideBar.tsx` ports the designlab (`designlabs/labs/explorer.html`) to React. Lazy `read_dir` per directory, keyboard navigation (↑↓→← Enter Home End), toolbar (new file / refresh / collapse / show hidden), recents tab preserved, A11Y-004 tree-view contract.
 - **Explorer store** — `src/store/explorer.ts` — zustand + immer, lazy `children` cache, `setRoot` / `toggleDir` / `refresh` / `collapseAll` / `setSelected` / `createFile` actions, `subscribeToFileChanges` wires host `file:changed` events to tree refresh.
 - **Host commands** — `create_file(path, contents?)` (refuses to overwrite, returns `FileStat`) and `mkdir(path)` (`mkdir -p`, idempotent) added to `src-tauri/src/lib.rs`. Wrappers in `src/bridge/commands.ts`. Browser mocks in `MEMORY_FS` / `MEMORY_DIRS`. Docs: `docs/reference/host-commands.md`.
@@ -69,6 +77,7 @@ Initial public scaffolding. Usable in Vite (browser mock FS) and via Tauri when 
 - Session restore (`app_data_dir/recents.json`, window geometry) — host commands exist, renderer boot wiring is best-effort.
 - Single window, single user, local files only — no sync, no LSP/DAP, no collaboration (by design — see `explanation.md:7`).
 
-[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.1
 [0.2.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.0
 [0.1.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.1.0
