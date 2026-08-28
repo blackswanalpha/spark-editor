@@ -19,10 +19,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ---
 
+## [0.2.2] - 2026-08-28
+
+### Added
+- **Amber theme** — `src/theme/ThemeProvider.tsx:12` adds `amber` to `ThemeId`/`ORDER`/`resolveTheme` (now `light|dark|navy|amber|system`, 5-way cycle), `src/theme/tokens.css:244` new `:root[data-theme="amber"]` warm light theme (bg #fffbeb, surfaces #fef3c7→#fcd34d, accent #d97706 amber, shadows warm, syntax warm), `src/shell/TitleBar.tsx:23` adds `amber` to `THEME_OPTIONS` + 5-swatch grid, `src/shell/TitleBar.css:70` `grid-template-columns: repeat(3,1fr)` 20×14 + `.titlebar__swatch--amber` #f59e0b. Selectable via TitleBar theme menu, persisted via `LazyStore`/`localStorage`, cycles via `cycle()` — test OTA via `Help → Check for Updates` after `0.2.2` release.
+
+### Fixed
+- **Merge PR #6 / develop workflow** — `src-tauri/tauri.conf.json:71` pubkey corrected to single-line minisign format `dW50…` (was raw 32-byte `RWRa…` which failed `invalid utf-8 at index 5` on `cargo tauri build` with `createUpdaterArtifacts:true`); `src-tauri/Cargo.lock` synced (0.2.1→0.2.2). `.github/workflows/develop.yml:27` `ci` now `if: github.ref == 'refs/heads/develop' || pull_request || workflow_dispatch` (was triggering on `main` push and failing). `.github/workflows/release.yml:85` `verify-ota` now `uses: actions/checkout@v4` (was `not a git repository` + `latest.json not found`).
+
 ## [0.2.1] - 2026-08-28
 
 ### Fixed
-- **OTA signing key** — previous `v0.2.0` key was generated without password and fails at build (`Missing comment in secret key`). Regenerated with password `spark-ota-2025`, `src-tauri/tauri.conf.json:71` pubkey now `RWRaUWew/hvfdKkydjS7CiAtKLfGko9J9MNWe67IUqgn8RobeXHGPW0n` (id `74DF1BFEB067515A`). `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets updated. Verified `cargo tauri signer sign` now succeeds.
+- **OTA signing key** — previous `v0.2.0` key was generated without password and fails at build (`Missing comment in secret key`). Regenerated with password `spark-ota-2025`, `src-tauri/tauri.conf.json:71` pubkey now `RWRaUWew/hvfdKkydjS7CiAtKLfGko9J9MNWe67IUqgn8RobeXHGPW0n` (id `74DF1BFEB067515A`, corrected to single-line `dW50…` in 0.2.2). `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets updated. Verified `cargo tauri signer sign` now succeeds.
 
 ### Added
 - **Develop workflow** — `.github/workflows/develop.yml:1` — `develop` CI gate, `build-develop-artifact` (deb/AppImage for QA, `createUpdaterArtifacts:false`), and `cut-release` (`workflow_dispatch` → bumps `package.json`/`Cargo.toml`/`tauri.conf.json`, creates `release/*` branch + PR to `main`). `auto-bump` helper for patch/minor/major. See `gitflow.md`.
@@ -77,7 +85,8 @@ Initial public scaffolding. Usable in Vite (browser mock FS) and via Tauri when 
 - Session restore (`app_data_dir/recents.json`, window geometry) — host commands exist, renderer boot wiring is best-effort.
 - Single window, single user, local files only — no sync, no LSP/DAP, no collaboration (by design — see `explanation.md:7`).
 
-[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.2
 [0.2.1]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.1
 [0.2.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.0
 [0.1.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.1.0
