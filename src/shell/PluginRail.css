@@ -1,0 +1,72 @@
+/* ============================================================
+   sparkEditor · src/shell/PluginRail.css
+   Hairline icon rail left of the explorer.
+   - fixed 51px (44px +15%)
+   - vertical icon stack
+   - hairline right border only
+   ============================================================ */
+.plugin-rail {
+  grid-area: rail;
+  width: 51px;
+  min-width: 51px;
+  max-width: 51px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  user-select: none;
+}
+
+.plugin-rail__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  width: 100%;
+}
+
+.plugin-rail__btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  position: relative;
+}
+
+.plugin-rail__btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.plugin-rail__btn.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.plugin-rail__btn:focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+/* active indicator hairline on left edge */
+.plugin-rail__btn.is-active::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.plugin-rail__spacer { flex: 1; }

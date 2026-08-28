@@ -54,6 +54,14 @@ import {
   FilePlus,
   FolderPlus,
   FolderSimplePlus,
+  Scissors,
+  Copy,
+  Clipboard,
+  PencilSimple,
+  Terminal,
+  ArrowSquareOut,
+  Trash,
+  ArrowsClockwise,
 } from "@phosphor-icons/react";
 import { DartIcon } from "./DartIcon";
 
@@ -103,6 +111,14 @@ const PHOSPHOR_MAP: Record<string, PhosphorComp> = {
   FilePlus,
   FolderPlus,
   FolderSimplePlus,
+  Scissors,
+  Copy,
+  Clipboard,
+  PencilSimple,
+  Terminal,
+  ArrowSquareOut,
+  Trash,
+  ArrowsClockwise,
 };
 
 const CUSTOM_MAP: Record<string, PhosphorComp> = {
@@ -158,6 +174,14 @@ const ALIAS: Record<string, keyof typeof PHOSPHOR_MAP | keyof typeof CUSTOM_MAP>
   settings: "Gear",
   "sidebar-toggle": "Sidebar",
   undo: "ArrowUUpLeft",
+  scissors: "Scissors",
+  copy: "Copy",
+  clipboard: "Clipboard",
+  pencil: "PencilSimple",
+  terminal: "Terminal",
+  external: "ArrowSquareOut",
+  trash: "Trash",
+  "arrows-clockwise": "ArrowsClockwise",
 };
 
 export type LegacyIconName = keyof typeof ALIAS;

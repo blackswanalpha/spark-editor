@@ -5,18 +5,19 @@
 .app {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 51px auto 1fr;
   grid-template-areas:
-    "titlebar titlebar"
-    "menubar  menubar"
-    "sidebar  main"
-    "status   status";
+    "titlebar titlebar titlebar"
+    "menubar  menubar  menubar"
+    "rail     sidebar  main"
+    "status   status   status";
   height: 100vh;
   width: 100vw;
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
 }
+.app__rail { grid-area: rail; display: flex; min-height: 0; overflow: hidden; }
 .app__menubar { grid-area: menubar; }
 .app__sidebar {
   grid-area: sidebar;
