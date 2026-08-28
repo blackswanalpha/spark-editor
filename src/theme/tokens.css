@@ -242,7 +242,57 @@
 }
 
 /* ===================================================================
-   SYSTEM: when data-theme="system", follow OS via prefers-color-scheme.
+    THEME 4: AMBER / YELLOW
+    Warm amber light theme — test OTA. High contrast warm neutrals
+    with amber accent. Selectable via TitleBar theme menu.
+    =================================================================== */
+:root[data-theme="amber"] {
+  color-scheme: light;
+
+  --bg:           #fffbeb;
+  --surface-1:    #ffffff;
+  --surface-2:    #fef3c7;
+  --surface-3:    #fde68a;
+  --surface-4:    #fcd34d;
+  --border:       #fbbf24;
+  --border-strong:#f59e0b;
+
+  --text:        #451a03;
+  --text-muted:  #92400e;
+  --text-faint:  #b45309;
+  --on-accent:   #ffffff;
+
+  --accent:        #d97706;
+  --accent-hover:  #b45309;
+  --accent-active: #92400e;
+  --accent-soft:   #fef3c7;
+  --accent-fg:     #ffffff;
+
+  --success:     #1a7f37;
+  --warning:     #d97706;
+  --danger:      #c62828;
+  --info:        #d97706;
+
+  --selection:   rgba(217, 119, 6, 0.22);
+  --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+
+  --shadow-1: 0 1px 2px rgba(146, 64, 14, 0.08);
+  --shadow-2: 0 4px 16px rgba(146, 64, 14, 0.12);
+  --shadow-3: 0 12px 40px rgba(146, 64, 14, 0.18);
+
+  --syn-keyword: #be185d;
+  --syn-string:  #1a7f37;
+  --syn-number:  #b45309;
+  --syn-comment: #92400e;
+  --syn-func:    #d97706;
+  --syn-tag:     #c62828;
+  --syn-type:    #92400e;
+  --syn-regex:   #b45309;
+  --syn-attr:    #78350f;
+}
+
+/* ===================================================================
+    SYSTEM: when data-theme="system", follow OS via prefers-color-scheme.
    Maps to the dark tokens (it would be equivalent to light too if the
    user prefers light — see the @media blocks below).
    =================================================================== */
