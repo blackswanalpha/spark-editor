@@ -11,12 +11,13 @@
    (decorations: false, titleBarStyle: "Overlay" on macOS) so
    the rendered titlebar IS the chrome.
    ============================================================ */
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "@motion/index";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { TitleBar } from "@shell/TitleBar";
 import { MenuBar } from "@shell/MenuBar";
 import { SideBar } from "@shell/SideBar";
+import { PluginRail } from "@shell/PluginRail";
 import { Tabs } from "@ui/Tabs";
 import { StatusBar } from "@ui/StatusBar";
 import { CommandPalette } from "@shell/CommandPalette";
@@ -274,6 +275,10 @@ function Shell() {
 
       <MenuBar commands={commandsRef.current} hasActiveDoc={!!activeDoc} />
 
+      <div className="app__rail">
+        <PluginRail />
+      </div>
+
       <AnimatePresence>
         {showSidebar && (
           <motion.aside
@@ -506,7 +511,58 @@ function isMac() {
   return typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 }
 
+function isTerminalWindow() {
+  try { return new URLSearchParams(window.location.search).has("terminal"); } catch { return false; }
+}
+
+function TerminalStandalone() {
+  const params = new URLSearchParams(window.location.search);
+  const initialCwd = params.get("cwd") || "/";
+  // minimal standalone terminal window — used for Tauri pop-out OS window
+  // Reuse the same XTerm logic but without the main app chrome
+  const [cwd] = useState(initialCwd);
+  // listen for cwd updates from main window via postMessage / storage
+  const [liveCwd, setLiveCwd] = useState(cwd);
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.data && e.data.type === "spark:terminal:cwd" && typeof e.data.cwd === "string") setLiveCwd(e.data.cwd);
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "spark:terminal:cwd" && e.newValue) setLiveCwd(e.newValue);
+    };
+    window.addEventListener("message", onMsg);
+    window.addEventListener("storage", onStorage);
+    // also poll for Tauri event
+    let unlisten: (() => void) | null = null;
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<string>("terminal:cwd", (ev) => { if (typeof ev.payload === "string") setLiveCwd(ev.payload); });
+      } catch {}
+    })();
+    return () => {
+      window.removeEventListener("message", onMsg);
+      window.removeEventListener("storage", onStorage);
+      try { unlisten?.(); } catch {}
+    };
+  }, []);
+  // lazy import the terminal UI
+  const TerminalPanelLazy = React.lazy(() => import("@shell/TerminalPanel").then(m => ({ default: m.TerminalStandaloneInner })));
+  return (
+    <React.Suspense fallback={<div style={{padding:12,color:"#a2abb8",background:"#1c2027",height:"100vh"}}>Loading terminal…</div>}>
+      <TerminalPanelLazy cwd={liveCwd} />
+    </React.Suspense>
+  );
+}
+
 export default function App() {
+  if (isTerminalWindow()) {
+    return (
+      <ThemeProvider>
+        <TerminalStandalone />
+      </ThemeProvider>
+    );
+  }
   return (
     <ThemeProvider>
       <ToastProvider>

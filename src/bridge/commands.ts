@@ -12,7 +12,22 @@ const isTauri = typeof window !== "undefined" &&
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri) {
-    return (await tInvoke<T>(cmd, args)) as T;
+    try {
+      return (await tInvoke<T>(cmd, args)) as T;
+    } catch (e: unknown) {
+      // WebKitGTK on Linux often logs "IPC custom protocol failed → postMessage fallback"
+      // and may surface as TypeError: Load failed or "Couldn't find callback id" after
+      // a reload/HMR while Rust is still processing. Fall back to the in-memory mock
+      // so the UI remains usable in `vite` dev without a hard crash, and avoid
+      // spamming unhandled rejections. Real Tauri errors still propagate after the
+      // fallback check below.
+      const msg = String((e as Error)?.message ?? e ?? "");
+      if (msg.includes("Load failed") || msg.includes("callback id") || msg.includes("custom protocol")) {
+        console.warn(`[bridge] invoke "${cmd}" fell back to mock (Tauri IPC unavailable):`, msg);
+        return mock<T>(cmd, args);
+      }
+      throw e;
+    }
   }
   // Browser-only fallback (mocked fs)
   return mock<T>(cmd, args);
@@ -45,6 +60,14 @@ export const stat      = (path: string) => call<FileStat>("stat", { path });
 export const readDir   = (path: string) => call<DirEntry[]>("read_dir", { path });
 export const renamePath= (from: string, to: string) => call<void>("rename", { from, to });
 export const deletePath= (path: string) => call<void>("delete", { path });
+export const copyPath  = (from: string, to: string) => call<void>("copy", { from, to });
+
+/** Open the host's terminal emulator rooted at `cwd`. No-op in browser mock. */
+export const openInTerminal = (cwd: string) => call<void>("open_in_terminal", { cwd });
+/** Reveal `path` in the OS file manager (Finder/Explorer/Nautilus). */
+export const revealInOS = (path: string) => call<void>("reveal_in_folder", { path });
+/** Open a file with the OS default application. */
+export const openWithOS = (path: string) => call<void>("open_with_os", { path });
 
 /**
  * Create a new file at `path` with optional `contents` (defaults to "").
@@ -232,6 +255,63 @@ function mock<T>(cmd: string, args?: any): T {
     case "watch_path":
       return ("mock-" + Math.random().toString(36).slice(2)) as unknown as T;
     case "unwatch_path":
+      return undefined as unknown as T;
+    case "rename": {
+      // Move every MEMORY_FS / MEMORY_DIRS entry whose key starts with `${from}/`
+      // to use `${to}/` instead. Refuse if `to` collides.
+      const from = args.from as string;
+      const to = args.to as string;
+      if (MEMORY_FS.has(to) || MEMORY_DIRS.has(to)) {
+        throw { kind: "AlreadyExists", path: to };
+      }
+      const fromPrefix = from + "/";
+      const toPrefix = to + "/";
+      const renameKey = (k: string) => (k === from ? to : k.startsWith(fromPrefix) ? toPrefix + k.slice(fromPrefix.length) : k);
+      for (const k of Array.from(MEMORY_FS.keys())) {
+        const v = MEMORY_FS.get(k);
+        MEMORY_FS.delete(k);
+        MEMORY_FS.set(renameKey(k), v as string);
+      }
+      for (const d of Array.from(MEMORY_DIRS)) {
+        MEMORY_DIRS.delete(d);
+        MEMORY_DIRS.add(renameKey(d));
+      }
+      return undefined as unknown as T;
+    }
+    case "delete": {
+      // Remove a file or (recursively) a directory from the mock.
+      const p = args.path as string;
+      const prefix = p + "/";
+      for (const k of Array.from(MEMORY_FS.keys())) {
+        if (k === p || k.startsWith(prefix)) MEMORY_FS.delete(k);
+      }
+      for (const d of Array.from(MEMORY_DIRS)) {
+        if (d === p || d.startsWith(prefix)) MEMORY_DIRS.delete(d);
+      }
+      return undefined as unknown as T;
+    }
+    case "copy": {
+      const from = args.from as string;
+      const to = args.to as string;
+      if (MEMORY_FS.has(to) || MEMORY_DIRS.has(to)) {
+        throw { kind: "AlreadyExists", path: to };
+      }
+      const fromPrefix = from + "/";
+      const toPrefix = to + "/";
+      const renameKey = (k: string) => k.startsWith(fromPrefix) ? toPrefix + k.slice(fromPrefix.length) : k;
+      for (const [k, v] of MEMORY_FS) {
+        if (k === from) { MEMORY_FS.set(to, v); }
+        else if (k.startsWith(fromPrefix)) { MEMORY_FS.set(renameKey(k), v); }
+      }
+      for (const d of Array.from(MEMORY_DIRS)) {
+        if (d === from) MEMORY_DIRS.add(to);
+        else if (d.startsWith(fromPrefix)) { MEMORY_DIRS.add(renameKey(d)); }
+      }
+      return undefined as unknown as T;
+    }
+    case "open_in_terminal":
+    case "reveal_in_folder":
+    case "open_with_os":
       return undefined as unknown as T;
     case "recents_get":
       return ["/welcome.md", "/notes.md", "/hello.ts", "/README.md", "/demo/index.html", "/sample.svg"] as unknown as T;

@@ -19,6 +19,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ---
 
+## [0.3.0] - 2026-08-28
+
+### Added
+- **Terminal panel** — `src/shell/TerminalPanel.tsx:1` xterm.js (`@xterm/xterm@^6.0.0` + `@xterm/addon-fit@^0.11.0`) with `TerminalPanel.css:1`, cwd derived from explorer selection via `useTerminalCwd()` (selected → `targetCwd` → active doc → root → `/`), floating draggable panel + Document Picture-in-Picture / Tauri `WebviewWindow` / `window.open` pop-out (all OS-level windows, main stays interactive), `src/store/terminal.ts:1` Zustand `useTerminal` (`isOpen/targetCwd/openAt/toggle/setTargetCwd`) + `openTerminalAt(cwd)` / `closeTerminal()` imperative helpers (sync explorer selection + `spark:terminal:open` event), `src/shell/PluginRail.tsx:1` 44px hairline plugin rail left-of-explorer (`PluginRail.css:1`, `border-right: 1px solid var(--border)`) with extensible `PLUGINS` registry (first entry `terminal`), `src/App.tsx:278` `app__rail` layout + `isTerminalWindow()` / `TerminalStandalone` (lazy `TerminalStandaloneInner`, `terminal:?cwd=` query, `postMessage`/`storage`/`terminal:cwd` event sync) for true out-of-window hosting.
+- **Explorer context menu** — `src/shell/ExplorerContextMenu.tsx:1` right-click / bubble menu (new file…, new folder…, open in terminal, reveal in OS, cut, copy, paste, rename…, refactor…, delete) filtered by `isDir` + `clipboard` state, rename + delete confirm dialogs (`Dialog`/`Input`/`Button`), `src/ui/ContextMenu.tsx:1` + `ContextMenu.css:1` Radix `ContextMenu` primitive (`ContextMenuEntry` type), `src/shell/SideBar.tsx:1` wires `ExplorerContextMenu` per-row + empty-area + bubble-menu `Open in Terminal` → `openTerminalAt(cwd)` (routes to in-app panel, no external spawn), `src/ui/Icon.tsx:68` new icon entries, `src/ui/Dropdown.tsx`/`Popover.tsx` polish, `src/shell/SideBar.css:1` + `src/App.css:1` rail refinements, `src/editor/SvgEditor/index.tsx:1` minor fixes.
+- **Explorer store — clipboard & file ops** — `src/store/explorer.ts:45` adds `clipboard: ClipboardEntry|null` + `ClipboardOp = "copy"|"cut"` + actions `renamePath(path,newName)/moveTo(from,to)/deletePath(path)/copyTo(from,to)/setClipboard(entry)/pasteInto(targetDir)/openInTerminal(cwd)/revealInOS(path)/refactor(path,newName)` (refactor = rename for now, seam for future language-aware moves), eager cache remap for rename/move (parent listing rewrite, `children` key remap `path→to`, `expanded` set remap, `selectedPath` follow), `nextAvailableDest()` probes `stat()` for `name copy` / `name copy (N)` collision avoidance (1000 probes → timestamp fallback), `src/store/explorer.test.ts:1` 5 new tests: `createFile+renamePath updates cache+selection`, `createFolder+deletePath removes entry`, `setClipboard copy → pasteInto produces 'name copy'`, `cut → paste moves+clears clipboard`, `renamePath rejects path separators` (19 total green).
+- **Host commands** — `src-tauri/src/lib.rs:191` new `#[tauri::command]`s: `rename(from,to)` (refuse if dest exists, `create_dir_all(parent)`), `delete(path)` (dir → `remove_dir_all`, else `remove_file`), `copy(from,to)` + `copy_dir_recursive(src,dst)` (refuse if dest exists, recursive dir copy), `open_in_terminal(cwd)` (macOS `open -a Terminal <cwd>`, Windows `cmd /C start cmd /K cd /d <cwd>`, Linux probe `x-terminal-emulator|gnome-terminal|konsole|alacritty|xterm` with `--working-directory` variants), `reveal_in_folder(path)` (`open -R` / `explorer /select,` / `xdg-open parent`), `open_with_os(path)` (`open` / `cmd /C start` / `xdg-open`), all registered in `invoke_handler` at `lib.rs:443`; `src-tauri/capabilities/default.json:5` adds `windows: ["main","terminal"]` + `core:window:allow-create|allow-set-focus|allow-show|allow-hide|core:webview:allow-create-webview*` permissions for pop-out windows.
+- **Bridge** — `src/bridge/commands.ts:12` wraps `tInvoke` in `Load failed/custom protocol/callback id` fallback (`console.warn` + `mock()` so Vite dev without Tauri stays usable), new typed wrappers `copyPath/openInTerminal/revealInOS/openWithOS`, memory mocks for `rename` (prefix-rename `MEMORY_FS`/`MEMORY_DIRS` keys), `delete` (recursive prefix delete), `copy` (prefix copy), and no-ops for `open_in_terminal/reveal_in_folder/open_with_os`; `src/store/terminal.ts:1` re-exports `openTerminalAt`/`closeTerminal` for non-React callers.
+
+### Changed
+- **Deps** — `package.json:73` adds `@xterm/xterm@^6.0.0` + `@xterm/addon-fit@^0.11.0` (2308 insertions, 24 files). `src-tauri/tauri.conf.json:28` `security.csp` → `null` (was `default-src 'self'…` — loosened for xterm `blob:`/inline styles in terminal panel; re-tighten before hardening).
+- **CSP** — noted above; OTA `latest.json` endpoint unchanged (`https://github.com/blackswanalpha/spark-editor/releases/latest/download/latest.json`).
+
 ## [0.2.2] - 2026-08-28
 
 ### Added
@@ -85,7 +98,8 @@ Initial public scaffolding. Usable in Vite (browser mock FS) and via Tauri when 
 - Session restore (`app_data_dir/recents.json`, window geometry) — host commands exist, renderer boot wiring is best-effort.
 - Single window, single user, local files only — no sync, no LSP/DAP, no collaboration (by design — see `explanation.md:7`).
 
-[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.0
 [0.2.2]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.2
 [0.2.1]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.1
 [0.2.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.0

@@ -8,7 +8,16 @@
    ============================================================ */
 import { create } from "zustand";
 import { enableMapSet } from "immer";
-import { readDir, createFile as bridgeCreateFile, mkdir as bridgeMkdir } from "@bridge/commands";
+import {
+  readDir,
+  createFile as bridgeCreateFile,
+  mkdir as bridgeMkdir,
+  renamePath as bridgeRename,
+  deletePath as bridgeDelete,
+  copyPath as bridgeCopy,
+  openInTerminal as bridgeOpenInTerminal,
+  revealInOS as bridgeRevealInOS,
+} from "@bridge/commands";
 import { on } from "@bridge/events";
 
 enableMapSet();
@@ -45,9 +54,14 @@ interface State {
   showHidden: boolean;
   history: string[];
   historyIndex: number;
+  /** Active cut/copy clipboard entry. `pasteInto` consumes it. */
+  clipboard: ClipboardEntry | null;
 }
 
 /* ---------- Actions ---------- */
+export type ClipboardOp = "copy" | "cut";
+export interface ClipboardEntry { op: ClipboardOp; path: string; }
+
 interface Actions {
   setRoot: (path: string | null) => Promise<void>;
   goUp: () => Promise<void>;
@@ -64,6 +78,21 @@ interface Actions {
   setSelected: (path: string | null) => void;
   createFile: (parentDir: string, name: string) => Promise<CreateFileResult>;
   createFolder: (parentDir: string, name: string) => Promise<CreateFileResult>;
+  renamePath: (path: string, newName: string) => Promise<CreateFileResult>;
+  /** Move a file/folder to a fully-qualified `to` path (may be in a
+   *  different parent directory than the source). */
+  moveTo: (from: string, to: string) => Promise<CreateFileResult>;
+  deletePath: (path: string) => Promise<CreateFileResult>;
+  copyTo: (from: string, to: string) => Promise<CreateFileResult>;
+  /** Mark `path` for cut or copy. The actual filesystem copy/delete
+   *  happens on `pasteInto(targetDir)`. */
+  setClipboard: (entry: ClipboardEntry | null) => void;
+  pasteInto: (targetDir: string) => Promise<CreateFileResult>;
+  openInTerminal: (cwd: string) => Promise<CreateFileResult>;
+  revealInOS: (path: string) => Promise<CreateFileResult>;
+  /** Currently a thin wrapper around `renamePath` — a future PR
+   *  can layer on language-aware refactors (move symbol, etc.). */
+  refactor: (path: string, newName: string) => Promise<CreateFileResult>;
   subscribeToFileChanges: () => Promise<() => void>;
 }
 
@@ -125,6 +154,31 @@ function pushHistory(get: () => State & Actions, set: (p: Partial<State>) => voi
   set({ history: capped, historyIndex: capped.length - 1 });
 }
 
+/* ---------- internal: find a non-colliding destination for paste/copy ---------- */
+async function nextAvailableDest(targetDir: string, name: string): Promise<string> {
+  const { stat } = await import("@bridge/commands");
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  // Probe each candidate. We treat a stat result with both isFile and isDir
+  // false as "missing" (the Tauri host returns Err(NotFound); the browser
+  // mock returns a zero-flag stat for unknown paths).
+  const exists = async (p: string): Promise<boolean> => {
+    try {
+      const s = await stat(p) as { isFile?: boolean; isDir?: boolean };
+      return Boolean(s?.isFile || s?.isDir);
+    } catch {
+      return false;
+    }
+  };
+  for (let n = 0; n < 1000; n++) {
+    const candidate = joinPath(targetDir, n === 0 ? `${stem} copy${ext}` : `${stem} copy (${n})${ext}`);
+    if (!(await exists(candidate))) return candidate;
+  }
+  // Fallback: timestamped name.
+  return joinPath(targetDir, `${stem} copy ${Date.now()}${ext}`);
+}
+
 /* ---------- Store ---------- */
 export const useExplorer = create<State & Actions>((set, get) => ({
   root: null,
@@ -137,6 +191,7 @@ export const useExplorer = create<State & Actions>((set, get) => ({
   showHidden: false,
   history: [],
   historyIndex: -1,
+  clipboard: null,
 
   setRoot: async (path) => {
     _loadGen++;
@@ -423,6 +478,239 @@ export const useExplorer = create<State & Actions>((set, get) => ({
       set({ children });
     }
     return { ok: true };
+  },
+
+  renamePath: async (path, newName) => {
+    if (!newName || newName.includes("/") || newName.includes("\\")) {
+      return { ok: false, error: "Invalid name" };
+    }
+    const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+    const parent = idx > 0 ? path.slice(0, idx) : "/";
+    const to = joinPath(parent, newName);
+    if (to === path) return { ok: true };
+    try {
+      await bridgeRename(path, to);
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+    // Eagerly update cache: rewrite children's name/path for the renamed entry,
+    // and drop any cached children for the old path (it's gone).
+    const children = new Map(get().children);
+    // 1) the parent's listing
+    const siblings = children.get(parent);
+    if (siblings) {
+      const replaced = siblings.map((n) =>
+        n.path === path ? { ...n, name: newName, path: to } : n,
+      );
+      const sorted = replaced.slice().sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      children.set(parent, sorted);
+    }
+    // 2) cached children of the entry itself (if it was a dir): remap keys
+    const remapped = new Map<string, ExplorerNode[]>();
+    for (const [k, v] of children) {
+      if (k === path) {
+        // old cached children of renamed dir are now at `to`
+        remapped.set(to, v);
+      } else if (k.startsWith(path + "/")) {
+        remapped.set(to + k.slice(path.length), v);
+      } else {
+        remapped.set(k, v);
+      }
+    }
+    // 3) expanded set: same key remap
+    const expanded = new Set<string>();
+    for (const e of get().expanded) {
+      if (e === path) expanded.add(to);
+      else if (e.startsWith(path + "/")) expanded.add(to + e.slice(path.length));
+      else expanded.add(e);
+    }
+    // 4) selection moves too
+    const sel = get().selectedPath;
+    const selected = sel === path ? to : (sel && sel.startsWith(path + "/") ? to + sel.slice(path.length) : sel);
+    set({ children: remapped, expanded, selectedPath: selected });
+    return { ok: true };
+  },
+
+  moveTo: async (from, to) => {
+    if (from === to) return { ok: true };
+    try {
+      await bridgeRename(from, to);
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+    const srcIdx = Math.max(from.lastIndexOf("/"), from.lastIndexOf("\\"));
+    const dstIdx = Math.max(to.lastIndexOf("/"), to.lastIndexOf("\\"));
+    const srcParent = srcIdx > 0 ? from.slice(0, srcIdx) : "/";
+    const dstParent = dstIdx > 0 ? to.slice(0, dstIdx) : "/";
+    const newName = to.slice(dstIdx + 1);
+    const children = new Map(get().children);
+    // 1) drop the source entry from its parent's listing
+    const srcSiblings = children.get(srcParent);
+    if (srcSiblings) {
+      children.set(srcParent, srcSiblings.filter((n) => n.path !== from));
+    }
+    // 2) add the new entry to the dest parent's listing (if cached)
+    const destSiblings = children.get(dstParent);
+    if (destSiblings && !destSiblings.some((n) => n.path === to)) {
+      const srcEntry = srcSiblings?.find((n) => n.path === from);
+      const isDir = srcEntry?.isDir ?? false;
+      const isFile = srcEntry?.isFile ?? !isDir;
+      const next = [...destSiblings, { name: newName, path: to, isDir, isFile }];
+      next.sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      children.set(dstParent, next);
+    }
+    // 3) remap cached children keys
+    const remapped = new Map<string, ExplorerNode[]>();
+    for (const [k, v] of children) {
+      if (k === from) remapped.set(to, v);
+      else if (k.startsWith(from + "/")) remapped.set(to + k.slice(from.length), v);
+      else remapped.set(k, v);
+    }
+    // 4) remap expanded set
+    const expanded = new Set<string>();
+    for (const e of get().expanded) {
+      if (e === from) expanded.add(to);
+      else if (e.startsWith(from + "/")) expanded.add(to + e.slice(from.length));
+      else expanded.add(e);
+    }
+    // 5) ensure dest parent is expanded so the moved entry is visible
+    expanded.add(dstParent);
+    // 6) selection moves if it pointed inside the moved subtree
+    const sel = get().selectedPath;
+    const selected = sel === from ? to : (sel && sel.startsWith(from + "/") ? to + sel.slice(from.length) : sel);
+    set({ children: remapped, expanded, selectedPath: selected });
+    return { ok: true };
+  },
+
+  deletePath: async (path) => {
+    try {
+      await bridgeDelete(path);
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+    const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+    const parent = idx > 0 ? path.slice(0, idx) : "/";
+    // 1) remove from parent's listing
+    const children = new Map(get().children);
+    const siblings = children.get(parent);
+    if (siblings) {
+      children.set(parent, siblings.filter((n) => n.path !== path));
+    }
+    // 2) drop any cached subtree
+    const trimmed = new Map<string, ExplorerNode[]>();
+    for (const [k, v] of children) {
+      if (k === path || k.startsWith(path + "/")) continue;
+      trimmed.set(k, v);
+    }
+    // 3) collapse/delete from expanded
+    const expanded = new Set<string>();
+    for (const e of get().expanded) {
+      if (e === path || e.startsWith(path + "/")) continue;
+      expanded.add(e);
+    }
+    const sel = get().selectedPath;
+    const selected = sel === path || (sel && sel.startsWith(path + "/")) ? null : sel;
+    set({ children: trimmed, expanded, selectedPath: selected });
+    return { ok: true };
+  },
+
+  copyTo: async (from, to) => {
+    try {
+      await bridgeCopy(from, to);
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+    const idx = Math.max(to.lastIndexOf("/"), to.lastIndexOf("\\"));
+    const destParent = idx > 0 ? to.slice(0, idx) : "/";
+    const newName = to.slice(idx + 1);
+    // Eagerly add to the dest parent's listing if cached.
+    const children = new Map(get().children);
+    const siblings = children.get(destParent);
+    if (siblings) {
+      const srcEntry = siblings.find((n) => n.path === from);
+      const isDir = srcEntry?.isDir ?? false;
+      const isFile = srcEntry?.isFile ?? !isDir;
+      if (!siblings.some((n) => n.path === to)) {
+        const next = [...siblings, { name: newName, path: to, isDir, isFile }];
+        next.sort((a, b) => {
+          if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+        children.set(destParent, next);
+        const expanded = new Set(get().expanded);
+        expanded.add(destParent);
+        set({ children, expanded });
+      }
+    } else {
+      void get().loadChildren(destParent);
+    }
+    return { ok: true };
+  },
+
+  setClipboard: (entry) => {
+    set({ clipboard: entry });
+  },
+
+  pasteInto: async (targetDir) => {
+    const clip = get().clipboard;
+    if (!clip) return { ok: false, error: "Clipboard is empty" };
+    const idx = Math.max(clip.path.lastIndexOf("/"), clip.path.lastIndexOf("\\"));
+    const name = idx >= 0 ? clip.path.slice(idx + 1) : clip.path;
+    const currentParent = idx > 0 ? clip.path.slice(0, idx) : "/";
+    // No-op cut into the same directory.
+    if (clip.op === "cut" && currentParent === targetDir) {
+      set({ clipboard: null });
+      return { ok: true };
+    }
+    const to = joinPath(targetDir, name);
+    if (to === clip.path) {
+      // Same path == no-op for cut; for copy we still want a duplicate.
+      if (clip.op === "cut") set({ clipboard: null });
+      else {
+        const dest = await nextAvailableDest(targetDir, name);
+        return get().copyTo(clip.path, dest);
+      }
+      return { ok: true };
+    }
+    let res: CreateFileResult;
+    if (clip.op === "cut") {
+      res = await get().moveTo(clip.path, to);
+      if (res.ok) set({ clipboard: null });
+    } else {
+      const dest = await nextAvailableDest(targetDir, name);
+      res = await get().copyTo(clip.path, dest);
+    }
+    return res;
+  },
+
+  openInTerminal: async (cwd) => {
+    try {
+      await bridgeOpenInTerminal(cwd);
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+  },
+
+  revealInOS: async (path) => {
+    try {
+      await bridgeRevealInOS(path);
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+  },
+
+  refactor: async (path, newName) => {
+    // For now, refactor == rename. A future PR can layer language-aware
+    // refactors on top (rename symbol, etc.).
+    return get().renamePath(path, newName);
   },
 
   subscribeToFileChanges: async () => {

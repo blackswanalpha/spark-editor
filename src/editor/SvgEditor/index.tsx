@@ -428,7 +428,6 @@ function updateNode(nodes: SvgNode[], id: string, patch: Record<string,string>):
 function renderNode(n: SvgNode, selectedId: string | null, onPointerDown: (e: React.PointerEvent, id: string)=>void): React.ReactNode {
   const isSel = selectedId === n.attrs.id;
   const common: any = {
-    key: n.attrs.id,
     onPointerDown: (e: React.PointerEvent) => onPointerDown(e, n.attrs.id),
     style: { cursor: "grab" },
     stroke: n.attrs.stroke,
@@ -438,17 +437,17 @@ function renderNode(n: SvgNode, selectedId: string | null, onPointerDown: (e: Re
   if (isSel) common.stroke = "var(--accent)";
   switch (n.kind) {
     case "rect":
-      return <rect {...common} x={n.attrs.x} y={n.attrs.y} width={n.attrs.width} height={n.attrs.height} rx={n.attrs.rx} strokeWidth={n.attrs["stroke-width"]} />;
+      return <rect key={n.attrs.id} {...common} x={n.attrs.x} y={n.attrs.y} width={n.attrs.width} height={n.attrs.height} rx={n.attrs.rx} strokeWidth={n.attrs["stroke-width"]} />;
     case "circle":
-      return <circle {...common} cx={n.attrs.cx} cy={n.attrs.cy} r={n.attrs.r} strokeWidth={n.attrs["stroke-width"]} />;
+      return <circle key={n.attrs.id} {...common} cx={n.attrs.cx} cy={n.attrs.cy} r={n.attrs.r} strokeWidth={n.attrs["stroke-width"]} />;
     case "ellipse":
-      return <ellipse {...common} cx={n.attrs.cx} cy={n.attrs.cy} rx={n.attrs.rx} ry={n.attrs.ry} strokeWidth={n.attrs["stroke-width"]} />;
+      return <ellipse key={n.attrs.id} {...common} cx={n.attrs.cx} cy={n.attrs.cy} rx={n.attrs.rx} ry={n.attrs.ry} strokeWidth={n.attrs["stroke-width"]} />;
     case "line":
-      return <line {...common} x1={n.attrs.x1} y1={n.attrs.y1} x2={n.attrs.x2} y2={n.attrs.y2} strokeWidth={n.attrs["stroke-width"]} />;
+      return <line key={n.attrs.id} {...common} x1={n.attrs.x1} y1={n.attrs.y1} x2={n.attrs.x2} y2={n.attrs.y2} strokeWidth={n.attrs["stroke-width"]} />;
     case "path":
-      return <path {...common} d={n.attrs.d} strokeWidth={n.attrs["stroke-width"]} transform={n.attrs.transform} />;
+      return <path key={n.attrs.id} {...common} d={n.attrs.d} strokeWidth={n.attrs["stroke-width"]} transform={n.attrs.transform} />;
     case "text":
-      return <text {...common} x={n.attrs.x} y={n.attrs.y} fontSize={n.attrs["font-size"]} fontFamily={n.attrs["font-family"]} fill={n.attrs.fill ?? "#000"} stroke="none">{n.attrs._text ?? ""}</text>;
+      return <text key={n.attrs.id} {...common} x={n.attrs.x} y={n.attrs.y} fontSize={n.attrs["font-size"]} fontFamily={n.attrs["font-family"]} fill={n.attrs.fill ?? "#000"} stroke="none">{n.attrs._text ?? ""}</text>;
     case "g":
       return <g key={n.attrs.id} id={n.attrs.id} transform={n.attrs.transform} onPointerDown={(e)=>onPointerDown(e,n.attrs.id)}>{(n.children??[]).map(c=> renderNode(c, selectedId, onPointerDown))}</g>;
     case "foreign":

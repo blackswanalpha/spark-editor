@@ -21,6 +21,8 @@ import { Popover, PopoverTrigger, PopoverContent } from "@ui/Popover";
 import { useExplorer, type ExplorerNode } from "@store/explorer";
 import { splitPath, openFolderDialog } from "@bridge/commands";
 import { langIdOf } from "@editor/CodeEditor/languages";
+import { ExplorerContextMenu } from "./ExplorerContextMenu";
+import { openTerminalAt } from "@store/terminal";
 import "./SideBar.css";
 
 /* Lightweight error boundary for the file tree — satisfies React's
@@ -197,6 +199,17 @@ function Explorer({
     setCreateOpen(true);
   }, []);
 
+  const bubbleCwd = useMemo(() => {
+    const sel = slice.selectedPath;
+    if (sel) {
+      if (slice.children.has(sel)) return sel;
+      const idx = Math.max(sel.lastIndexOf("/"), sel.lastIndexOf("\\"));
+      if (idx > 0) return sel.slice(0, idx) || "/";
+      return root;
+    }
+    return root;
+  }, [slice.selectedPath, slice.children, root]);
+
   return (
     <div className="explorer" aria-label="File explorer">
       <div className="explorer__header">
@@ -273,6 +286,20 @@ function Explorer({
                 <Icon name="folder-plus" size={16} />
                 <span>New Folder…</span>
               </button>
+              <div className="explorer__bubble-sep" role="separator" />
+              <button
+                type="button"
+                className="explorer__bubble-item"
+                onClick={() => {
+                  setBubbleOpen(false);
+                  openTerminalAt(bubbleCwd);
+                  onInfo?.(`Terminal: ${bubbleCwd}`);
+                }}
+                title={`Open internal terminal at ${bubbleCwd}`}
+              >
+                <Icon name="terminal" size={16} />
+                <span>Open in Terminal</span>
+              </button>
             </PopoverContent>
           </Popover>
           <button
@@ -322,6 +349,9 @@ function Explorer({
         onOpen={onOpen}
         activePath={activePath}
         slice={slice}
+        onRequestCreate={openCreate}
+        onInfo={onInfo}
+        onError={onError}
       />
     </div>
   );
@@ -470,14 +500,21 @@ type Slice = {
   historyIndex: number;
 };
 
+interface TreeContextMenuProps {
+  onRequestCreate: (kind: "file" | "folder", targetDir: string) => void;
+  onInfo?: (m: string) => void;
+  onError?: (m: string, d?: string) => void;
+  onOpen?: (p: string) => void;
+}
+
 function Tree({
-  root, onOpen, activePath, slice,
+  root, onOpen, activePath, slice, onRequestCreate, onInfo, onError,
 }: {
   root: string;
   onOpen: (path: string) => void;
   activePath?: string;
   slice: Slice;
-}) {
+} & TreeContextMenuProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
 
@@ -538,19 +575,29 @@ function Tree({
       onKeyDown={onKeyDown}
       role="presentation"
     >
-      <div
-        className="tree-root"
-        role="treeitem"
-        aria-level={1}
-        aria-selected={activePath === root}
-        data-path={root}
-        data-dir="true"
-        tabIndex={focusedPath === null ? 0 : -1}
-        onFocus={() => setFocusedPath(root)}
+      <ExplorerContextMenu
+        path={root}
+        isDir
+        name={splitPath(root).pop() || root}
+        onRequestCreate={onRequestCreate}
+        onInfo={onInfo}
+        onError={onError}
+        onOpen={onOpen}
       >
-        <Icon name="folder-open" size={14} />
-        <span className="tree-root__name">{splitPath(root).pop() || root}</span>
-      </div>
+        <div
+          className="tree-root"
+          role="treeitem"
+          aria-level={1}
+          aria-selected={activePath === root}
+          data-path={root}
+          data-dir="true"
+          tabIndex={focusedPath === null ? 0 : -1}
+          onFocus={() => setFocusedPath(root)}
+        >
+          <Icon name="folder-open" size={14} />
+          <span className="tree-root__name">{splitPath(root).pop() || root}</span>
+        </div>
+      </ExplorerContextMenu>
       <TreeErrorBoundary>
         <div role="tree" aria-label="Files" tabIndex={-1} style={{ outline: "none" }}>
           <TreeLevel
@@ -559,6 +606,9 @@ function Tree({
             onOpen={onOpen}
             activePath={activePath}
             slice={slice}
+            onRequestCreate={onRequestCreate}
+            onInfo={onInfo}
+            onError={onError}
           />
         </div>
       </TreeErrorBoundary>
@@ -567,14 +617,14 @@ function Tree({
 }
 
 function TreeLevel({
-  dirPath, depth, onOpen, activePath, slice,
+  dirPath, depth, onOpen, activePath, slice, onRequestCreate, onInfo, onError,
 }: {
   dirPath: string;
   depth: number;
   onOpen: (p: string) => void;
   activePath?: string;
   slice: Slice;
-}) {
+} & TreeContextMenuProps) {
   const raw = slice.children.get(dirPath);
   const isLoading = slice.loading.has(dirPath);
   const error = slice.errors.get(dirPath);
@@ -594,7 +644,21 @@ function TreeLevel({
   }
 
   if (visible && visible.length === 0) {
-    return <div role="group"><div className="tree-empty">empty folder</div></div>;
+    return (
+      <ExplorerContextMenu
+        path={dirPath}
+        isDir
+        name={splitPath(dirPath).pop() || dirPath}
+        onRequestCreate={onRequestCreate}
+        onInfo={onInfo}
+        onError={onError}
+        onOpen={onOpen}
+      >
+        <div role="group">
+          <div className="tree-empty" data-path={dirPath} data-dir="true">empty folder — right-click to add</div>
+        </div>
+      </ExplorerContextMenu>
+    );
   }
 
   if (!visible) {
@@ -606,21 +670,31 @@ function TreeLevel({
   return (
     <div role="group">
       {visible.map((node) => (
-        <TreeRow key={node.path} node={node} depth={depth} onOpen={onOpen} activePath={activePath} slice={slice} />
+        <TreeRow
+          key={node.path}
+          node={node}
+          depth={depth}
+          onOpen={onOpen}
+          activePath={activePath}
+          slice={slice}
+          onRequestCreate={onRequestCreate}
+          onInfo={onInfo}
+          onError={onError}
+        />
       ))}
     </div>
   );
 }
 
 function TreeRow({
-  node, depth, onOpen, activePath, slice,
+  node, depth, onOpen, activePath, slice, onRequestCreate, onInfo, onError,
 }: {
   node: ExplorerNode;
   depth: number;
   onOpen: (p: string) => void;
   activePath?: string;
   slice: Slice;
-}) {
+} & TreeContextMenuProps) {
   const isExpanded = slice.expanded.has(node.path);
   const isActive = activePath === node.path;
   const isSelected = slice.selectedPath === node.path;
@@ -638,31 +712,41 @@ function TreeRow({
 
   return (
     <>
-      <button
-        type="button"
-        className={`tree-item ${isHidden ? "tree-item--hidden" : ""} ${isActive ? "is-active" : ""}`}
-        role="treeitem"
-        aria-level={depth}
-        aria-expanded={node.isDir ? isExpanded : undefined}
-        aria-selected={isSelected}
-        data-path={node.path}
-        data-dir={node.isDir ? "true" : "false"}
-        tabIndex={-1}
-        style={{ paddingLeft: indent }}
-        onClick={onClick}
+      <ExplorerContextMenu
+        path={node.path}
+        isDir={node.isDir}
+        name={node.name}
+        onRequestCreate={onRequestCreate}
+        onInfo={onInfo}
+        onError={onError}
+        onOpen={onOpen}
       >
-        <span className="tree-item__chev" data-icon="chevron-right" aria-hidden>
-          <Icon name="chevron-right" size={12} />
-        </span>
-        <span className="tree-item__icon" aria-hidden>
-          {node.isDir ? (
-            <Icon name="folder" size={14} />
-          ) : (
-            <FileIcon name={node.name} />
-          )}
-        </span>
-        <span className="tree-item__name">{node.name}</span>
-      </button>
+        <button
+          type="button"
+          className={`tree-item ${isHidden ? "tree-item--hidden" : ""} ${isActive ? "is-active" : ""}`}
+          role="treeitem"
+          aria-level={depth}
+          aria-expanded={node.isDir ? isExpanded : undefined}
+          aria-selected={isSelected}
+          data-path={node.path}
+          data-dir={node.isDir ? "true" : "false"}
+          tabIndex={-1}
+          style={{ paddingLeft: indent }}
+          onClick={onClick}
+        >
+          <span className="tree-item__chev" data-icon="chevron-right" aria-hidden>
+            <Icon name="chevron-right" size={12} />
+          </span>
+          <span className="tree-item__icon" aria-hidden>
+            {node.isDir ? (
+              <Icon name="folder" size={14} />
+            ) : (
+              <FileIcon name={node.name} />
+            )}
+          </span>
+          <span className="tree-item__name">{node.name}</span>
+        </button>
+      </ExplorerContextMenu>
       {node.isDir && isExpanded && (
         <div className="tree-group" role="group">
           <TreeLevel
@@ -671,6 +755,9 @@ function TreeRow({
             onOpen={onOpen}
             activePath={activePath}
             slice={slice}
+            onRequestCreate={onRequestCreate}
+            onInfo={onInfo}
+            onError={onError}
           />
         </div>
       )}
