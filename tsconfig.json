@@ -31,7 +31,8 @@
       "@motion/*":   ["src/motion/*"],
       "@ir/*":       ["src/ir/*"],
       "@lib/*":      ["src/lib/*"],
-      "@commands/*": ["src/commands/*"]
+      "@commands/*": ["src/commands/*"],
+      "@version":   ["src/version.ts"]
     }
   },
   "include": ["src", "src-tauri"],

@@ -4,6 +4,33 @@ import { isTauri } from "@bridge/commands";
 type ToastFn = (title: string, body?: string) => void;
 
 /**
+ * Classify an updater error so expected conditions are never surfaced
+ * as failures. Tauri's updater throws a few well-known shapes:
+ *
+ *  - "no-release"  — the endpoint 404s (no release published yet).
+ *  - "no-platform" — latest.json exists but has no entry for this
+ *    platform, e.g. a linux client hitting a manifest that only
+ *    publishes darwin/windows artifacts:
+ *      `None of the fallback platforms `["linux-x86_64"]` were found
+ *       in the response `platforms` object`
+ *  - "error"       — anything else (network, signature, …).
+ */
+export function classifyUpdaterError(msg: string): "no-release" | "no-platform" | "error" {
+  const m = msg.toLowerCase();
+  if (
+    m.includes("fallback platforms") ||
+    m.includes("platforms` object") ||
+    m.includes("platforms object") ||
+    m.includes("were found in the response") ||
+    /["'`]?(linux|darwin|windows)-[a-z0-9_]+["'`]?\s+(was|were)\s+not/.test(m)
+  ) {
+    return "no-platform";
+  }
+  if (m.includes("404") || m.includes("not found")) return "no-release";
+  return "error";
+}
+
+/**
  * Check for OTA update via Tauri updater.
  * - No-op in browser (Vite) dev where Tauri is not present.
  * - If an update is available, downloads + installs, then prompts restart.
@@ -68,19 +95,20 @@ export async function checkForUpdates(opts?: {
     return true;
   } catch (err: any) {
     const msg = err?.message ?? String(err);
-    // 404 on latest.json is normal when no release exists yet
-    if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
-      if (!opts?.silent) opts?.onInfo?.("No updates", "No release published yet");
-      return false;
+    switch (classifyUpdaterError(msg)) {
+      case "no-release":
+        // 404 on latest.json is normal when no release exists yet
+        if (!opts?.silent) opts?.onInfo?.("No updates", "No release published yet");
+        return false;
+      case "no-platform": {
+        // Platform missing from latest.json (e.g. linux artifact not in release).
+        if (!opts?.silent) opts?.onInfo?.("No updates", "No update available for this platform yet");
+        return false;
+      }
+      case "error":
+        opts?.onError?.("Update check failed", msg);
+        return false;
     }
-    // Platform not in latest.json (e.g. linux artifact missing from release).
-    // Tauri throws: None of the fallback platforms `["linux-x86_64"]` were found...
-    if (msg.includes("fallback platforms") || msg.includes("platforms` object")) {
-      if (!opts?.silent) opts?.onInfo?.("No updates", "No update available for this platform yet");
-      return false;
-    }
-    opts?.onError?.("Update check failed", msg);
-    return false;
   }
 }
 

@@ -27,6 +27,9 @@ import { RichEditor } from "@editor/RichEditor";
 import { HtmlPreview } from "@editor/HtmlPreview";
 import { SvgEditor } from "@editor/SvgEditor";
 import { SplashScreen } from "@shell/SplashScreen";
+import { WelcomeWizard } from "@shell/WelcomeWizard";
+import { OnboardingScreen } from "@shell/Onboarding";
+import { shouldShowWelcome } from "@shell/firstRun";
 import { ThemeProvider, useTheme } from "@theme/ThemeProvider";
 import { ToastProvider, useToast } from "@ui/Toast";
 import { useDocs } from "@store/documents";
@@ -66,6 +69,10 @@ function Shell() {
   const [unsavedContext, setUnsavedContext] = useState<string>("");
   const [unsavedBusy, setUnsavedBusy] = useState(false);
   const [unsavedError, setUnsavedError] = useState<string | null>(null);
+
+  /* Boot + first-run wizard state */
+  const [bootReady, setBootReady] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   const pendingCloseRef = useRef<(() => void) | null>(null);
 
@@ -154,13 +161,25 @@ function Shell() {
     return () => window.removeEventListener("spark:window:close:request", onClose);
   }, [active]);
 
-  // Boot: refresh recents + open last session (best effort)
+  // Boot: refresh recents + open last session (best effort).
+  // First run (no recents, nothing open, never onboarded) opens the
+  // welcome wizard instead of force-loading the sample document.
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      let recentsCount = 0;
       try {
         const r = await recentsGet();
+        recentsCount = r.length;
         setRecents(r.map((path) => ({ path, name: path.split("/").pop() || path })));
       } catch {}
+      if (shouldShowWelcome({ recentsCount, docsOpen: order.length })) {
+        if (!cancelled) {
+          setWelcomeOpen(true);
+          setBootReady(true);
+        }
+        return;
+      }
       try {
         if (order.length === 0) {
           const text = await readFile("/welcome.md");
@@ -170,7 +189,10 @@ function Shell() {
       } catch (e: any) {
         toast.error("Could not open welcome document", e?.kind || "Unknown error");
       }
+      if (!cancelled) setBootReady(true);
     })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Global keybindings
@@ -227,6 +249,13 @@ function Shell() {
     window.addEventListener("spark:help:checkForUpdates", onCheck);
     return () => window.removeEventListener("spark:help:checkForUpdates", onCheck);
   }, [toast]);
+
+  // Help → Show Welcome Screen (re-opens the first-run wizard)
+  useEffect(() => {
+    const onWelcome = () => setWelcomeOpen(true);
+    window.addEventListener("spark:help:welcome", onWelcome);
+    return () => window.removeEventListener("spark:help:welcome", onWelcome);
+  }, []);
 
   // Folder open: keep the registry's `currentRoot` and the explorer store
   // in sync so the three readers see the same value.
@@ -311,8 +340,9 @@ function Shell() {
         )}
       </AnimatePresence>
 
+      <SplashScreen ready={bootReady} />
+
       <main className="app__main">
-        <SplashScreen />
         {order.length > 0 ? (
           <>
             <Tabs
@@ -343,12 +373,22 @@ function Shell() {
             </div>
           </>
         ) : (
-          <EmptyState
-          onCreate={() => commandsRef.current.find(c => c.id === "file.new")?.run()}
-          onOpenFolder={() => commandsRef.current.find(c => c.id === "file.openFolder")?.run()}
-          onOpenFile={() => commandsRef.current.find(c => c.id === "file.open")?.run()}
-          onPalette={() => commandsRef.current.find(c => c.id === "view.commandPalette")?.run()}
-        />
+          <OnboardingScreen
+            recents={recents}
+            onCreate={() => commandsRef.current.find(c => c.id === "file.new")?.run()}
+            onOpenFolder={() => commandsRef.current.find(c => c.id === "file.openFolder")?.run()}
+            onOpenFile={() => commandsRef.current.find(c => c.id === "file.open")?.run()}
+            onOpenRecent={async (path) => {
+              try {
+                const text = await readFile(path);
+                open({ name: path.split("/").pop() || path, path, mode: pickMode(path), raw: text });
+                await recentsAdd(path).catch(() => {});
+              } catch (e: any) {
+                toast.error("Open failed", e?.kind || "Unknown error");
+              }
+            }}
+            onPalette={() => commandsRef.current.find(c => c.id === "view.commandPalette")?.run()}
+          />
         )}
       </main>
 
@@ -378,6 +418,7 @@ function Shell() {
         onOpenChange={setPaletteOpen}
         commands={commandsRef.current}
       />
+      <WelcomeWizard open={welcomeOpen} onOpenChange={setWelcomeOpen} />
       <OpenDialog />
       <SaveAsModal
         open={saveAsOpen}
@@ -463,46 +504,6 @@ function Shell() {
           }
         }}
       />
-    </div>
-  );
-}
-
-function EmptyState({
-  onCreate, onOpenFile, onOpenFolder, onPalette,
-}: {
-  onCreate: () => void;
-  onOpenFile: () => void;
-  onOpenFolder: () => void;
-  onPalette: () => void;
-}) {
-  return (
-    <div className="empty">
-      <img src="/spark-mark.svg" alt="" width={64} height={64} className="empty__logo" />
-      <h1 className="empty__title">sparkEditor</h1>
-      <p className="empty__sub">Open a folder to explore its files, or start with a single document.</p>
-      <div className="empty__actions">
-        <Button variant="primary" icon="folder-open" onClick={onOpenFolder}>
-          Open Folder…
-        </Button>
-        <Button variant="secondary" icon="folder" onClick={onOpenFile}>
-          Open File…
-        </Button>
-        <Button variant="ghost" icon="plus" onClick={onCreate}>
-          New document
-        </Button>
-      </div>
-      <p className="empty__hint">
-        <kbd>{isMac() ? "⌘" : "Ctrl"}</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd> to open a folder ·{" "}
-        <kbd>{isMac() ? "⌘" : "Ctrl"}</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> for the command palette
-      </p>
-      <Button
-        className="empty__palette-link"
-        variant="ghost"
-        icon="command"
-        onClick={onPalette}
-      >
-        Command palette
-      </Button>
     </div>
   );
 }

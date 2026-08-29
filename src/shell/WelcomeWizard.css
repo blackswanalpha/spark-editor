@@ -1,0 +1,140 @@
+/* ============================================================
+   sparkEditor · src/shell/WelcomeWizard.css
+   First-run welcome wizard. Uses design tokens only.
+   ============================================================ */
+.wizard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 65%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.wizard {
+  width: min(520px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  box-shadow: 0 24px 64px color-mix(in srgb, #000 35%, transparent);
+  overflow: hidden;
+}
+
+.wizard__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3, 12px);
+  padding: var(--sp-3, 12px) var(--sp-4, 16px);
+  border-bottom: 1px solid var(--border);
+}
+.wizard__title { font-weight: 600; flex: 1; }
+.wizard__dots { display: inline-flex; gap: 5px; }
+.wizard__dots i {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  transition: background 0.15s ease;
+}
+.wizard__dots i.is-active { background: var(--accent); }
+
+.wizard__step {
+  padding: var(--sp-5, 24px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3, 12px);
+}
+.wizard__logo {
+  margin: 0 auto;
+  filter: drop-shadow(0 8px 20px color-mix(in srgb, var(--accent) 35%, transparent));
+}
+.wizard__lede { color: var(--text-muted); text-align: center; margin: 0; }
+.wizard__meta {
+  text-align: center;
+  font-family: var(--font-code);
+  font-size: var(--size-xs);
+  color: var(--text-faint);
+}
+.wizard__points {
+  margin: 0;
+  padding: 0 0 0 var(--sp-4, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2, 8px);
+  color: var(--text-muted);
+  font-size: var(--size-sm);
+}
+.wizard__points strong { color: var(--text); }
+
+/* Theme picker cards */
+.wizard__themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--sp-2, 8px);
+}
+.wizard-theme {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--sp-3, 12px) var(--sp-2, 8px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.wizard-theme:hover { border-color: var(--accent); }
+.wizard-theme.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.wizard-theme__swatch {
+  display: inline-flex;
+  gap: 3px;
+  margin-bottom: 2px;
+}
+.wizard-theme__swatch i {
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, #000 15%, transparent);
+}
+.wizard-theme__label { font-size: var(--size-sm); font-weight: 600; }
+.wizard-theme__hint { font-size: var(--size-xs); color: var(--text-faint); }
+
+/* Theme swatch previews per theme id */
+.wizard-theme[data-theme-preview="system"] i { background: linear-gradient(135deg, #e8eaed 50%, #1c2027 50%); }
+.wizard-theme[data-theme-preview="light"]  i { background: #e8eaed; }
+.wizard-theme[data-theme-preview="dark"]   i { background: #1c2027; }
+.wizard-theme[data-theme-preview="navy"]   i { background: #14202e; }
+.wizard-theme[data-theme-preview="amber"]  i { background: #201810; }
+
+.wizard__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2, 8px);
+  padding: var(--sp-3, 12px) var(--sp-4, 16px);
+  border-top: 1px solid var(--border);
+}
+.wizard__spacer { flex: 1; }
+
+.wizard kbd {
+  font-family: var(--font-code);
+  font-size: var(--size-xs);
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--surface-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wizard, .wizard-overlay { transition: none !important; animation: none !important; }
+  .wizard__dots i { transition: none; }
+}

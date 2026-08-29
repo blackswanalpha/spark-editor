@@ -53,7 +53,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libfuse2
 
       - name: Install (npm ci)
         run: npm ci
@@ -76,7 +76,10 @@ jobs:
           releaseBody: "See changelog/CHANGELOG.md for notes. OTA manifests (latest.json) are attached."
           releaseDraft: false
           prerelease: false
-          args: --verbose
+          # Linux: explicit bundles — "all" can silently skip the AppImage
+          # updater artifact when bundling hiccups, which drops linux-x86_64
+          # from latest.json and breaks OTA on Linux clients.
+          args: ${{ matrix.os == 'ubuntu-latest' && '--verbose --bundles appimage,deb' || '--verbose' }}
 
   # Aggregate after all platforms built: ensure latest.json is present
   verify-ota:
@@ -99,3 +102,12 @@ jobs:
             exit 1
           fi
           echo "✓ latest.json present — OTA endpoint https://github.com/${{ github.repository }}/releases/latest/download/latest.json is live"
+          gh release download "$TAG" --pattern "latest.json" --output /tmp/latest.json
+          echo "Platforms published in latest.json:"
+          grep -oE '"[a-z0-9]+-[a-z0-9_]+"' /tmp/latest.json | grep -v version | sort -u || true
+          if ! grep -q '"linux-x86_64"' /tmp/latest.json; then
+            echo "::error::latest.json has no linux-x86_64 entry — Linux OTA clients will fail with 'None of the fallback platforms'"
+            echo "Ensure the ubuntu build produced the AppImage updater artifact (libfuse2 installed, --bundles appimage,deb)"
+            exit 1
+          fi
+          echo "✓ linux-x86_64 present in latest.json — Linux OTA is live"
