@@ -9,6 +9,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 ## [Unreleased]
 
 ### Added
+- Nothing yet.
+
+### Changed
+- Nothing yet.
+
+### Fixed
+- Nothing yet.
+
+---
+
+## [0.3.2] — 2026-08-29
+
+### Added
+- **Red theme** — `src/theme/tokens.css:294` new `:root[data-theme="red"]` dark crimson theme (bg #1c0a0e, surfaces #260f13→#57202b, accent #ef5350) with WCAG-checked text/contrast pairs and per-theme syntax tokens; `src/theme/ThemeProvider.tsx:12` adds `red` to `ThemeId`/`resolved`/`ORDER`/`resolveTheme` (now 5 themes + system); `src/shell/TitleBar.tsx:25` adds `red` to the theme menu + 6th swatch (3×2 mini-grid now fills exactly); `src/shell/TitleBar.css:95` `.titlebar__swatch--red` #ef5350; `src/shell/WelcomeWizard.tsx:25` adds Red ("Crimson night") to the wizard's theme pick; `src/shell/WelcomeWizard.css:117` swatch preview; `src/lib/themeTokens.ts:43` registers `spark-red` (and the previously missing `spark-amber`) Shiki themes, `src/lib/shiki.ts:20` loads them and `highlight()` accepts `amber`/`red` (`HighlightThemeId`).
 - **Splash screen rework** — `src/shell/SplashScreen.tsx` — stages now mirror the real boot sequence (assets → theme → IPC bridge → `state.json` → session restore → ready) with a `v{version}` meta line (`src/version.ts`, sourced from `package.json`); dismissal is gated on actual boot completion (`ready` prop from `App.tsx` boot effect), not a fake timer. Splash moved to the app root (covers the full window; `App.css` `.app` gains `position: relative`).
 - **First-time setup** — `src/shell/Onboarding.tsx` + `Onboarding.css` — first-run empty state (welcome cards: New document / Open file… / Open folder…, recents list, palette hint) replacing the old `EmptyState`; `src/shell/WelcomeWizard.tsx` + `WelcomeWizard.css` — 3-step first-run wizard (intro → theme pick (applies live, all 5 themes) → ready), Esc skips, focus moves per step and is restored on close (A11Y-002); `src/shell/firstRun.ts` — `spark.onboarded` localStorage flag + `shouldShowWelcome()` gate (first run only when there are no recents and no docs open); new Help → "Show Welcome Screen" command (`help.welcome` → `spark:help:welcome`).
 - **Loader** — `src/ui/Loader.tsx` — `LoaderOverlay` full-surface waiting state (spinner + message, blocking variant) for long-running host work; `prefers-reduced-motion` support in `Loader.css`.

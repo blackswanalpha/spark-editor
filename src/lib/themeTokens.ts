@@ -9,7 +9,7 @@ import type { ThemeRegistration } from "shiki";
 function buildTheme(name: string, bg: string, fg: string, c: Record<string, string>): ThemeRegistration {
   return {
     name,
-    type: name === "light" ? "light" as const : "dark" as const,
+    type: name === "spark-light" || name === "spark-amber" ? "light" as const : "dark" as const,
     bg,
     fg,
     colors: c,
@@ -39,5 +39,13 @@ export const themeTokens = {
   navy: buildTheme("spark-navy", "#0f1d33", "#eaf2ff", {
     comment: "#6c84a8", keyword: "#c792ea", string: "#c3e88d", number: "#f78c6c",
     func: "#82aaff", tag: "#ff5370", type: "#ffcb6b", attr: "#c792ea", regex: "#f78c6c",
+  }),
+  amber: buildTheme("spark-amber", "#fffbeb", "#451a03", {
+    comment: "#92400e", keyword: "#be185d", string: "#1a7f37", number: "#b45309",
+    func: "#d97706", tag: "#c62828", type: "#92400e", attr: "#78350f", regex: "#b45309",
+  }),
+  red: buildTheme("spark-red", "#260f13", "#ffe9ec", {
+    comment: "#a9737c", keyword: "#ff8a80", string: "#a5d6a7", number: "#ffcc80",
+    func: "#ef9a9a", tag: "#ff5252", type: "#ffe082", attr: "#f48fb1", regex: "#ffab91",
   }),
 };

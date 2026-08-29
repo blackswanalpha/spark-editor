@@ -92,6 +92,7 @@
 .titlebar__swatch--dark   { background: #f5c518; } /* yellow */
 .titlebar__swatch--navy   { background: #000000; } /* black */
 .titlebar__swatch--amber  { background: #f59e0b; } /* amber */
+.titlebar__swatch--red    { background: #ef5350; } /* red */
 .titlebar__swatch--system {
   background: linear-gradient(135deg, #2f6bde 50%, #e53935 50%); /* blue + red */
 }

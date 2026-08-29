@@ -4,6 +4,13 @@ Chronological build log. Each entry is dated, scoped, and linked to the Changelo
 
 ---
 
+## 2026-08-29 — Release 0.3.2: red theme (+ boot experience from #14)
+
+- **Scope:** `src/theme/{tokens.css,ThemeProvider.tsx}`, `src/shell/{TitleBar.tsx,TitleBar.css,WelcomeWizard.tsx,WelcomeWizard.css}`, `src/lib/{themeTokens.ts,shiki.ts}`, `package.json`, `src-tauri/{tauri.conf.json,Cargo.toml,Cargo.lock}`, `changelog/{CHANGELOG.md,0.3.2.md}`, `worklog.md`.
+- **What:** Added the **red** theme (dark crimson: bg #1c0a0e, surfaces #260f13→#57202b, accent #ef5350) across all theme touchpoints — tokens, provider types/ORDER/resolve, TitleBar menu + 6th swatch (3×2 mini-grid fills exactly), welcome-wizard pick + preview swatch, and Shiki registration (`spark-red`, plus the previously missed `spark-amber`; `highlight()` now takes `HighlightThemeId`). Version bumped 0.3.1 → 0.3.2 so the release also ships the boot-experience work merged from `feature/boot-experience-screens` (#14): real-stage splash, welcome wizard + onboarding, loader overlay, and the updater missing-platform fix (release workflow now guarantees `linux-x86_64` in `latest.json`).
+- **Decisions:** Red is a dark theme (pairs with navy=dark-blue, amber=light-warm) so the set spans dark blue / light warm / dark red. Amber's missing Shiki registration was fixed in passing while touching the highlight bridge.
+- **Verification:** `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`; `cargo update -p spark-editor --offline` synced the lock at 0.3.2.
+
 ## 2026-08-28 — Boot experience: splash / loader / first-run setup + updater platform fix
 
 - **Scope:** `src/shell/{SplashScreen,WelcomeWizard,Onboarding,firstRun}.{tsx,ts,css}`, `src/ui/{Loader.tsx,Loader.css}`, `src/App.tsx`, `src/App.css`, `src/version.ts`, `src/bridge/updater.ts`, `src/commands/registry.ts`, `tsconfig.json`, `vite.config.ts`, `.github/workflows/release.yml`, `changelog/CHANGELOG.md`.

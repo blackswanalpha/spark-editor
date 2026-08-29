@@ -114,6 +114,7 @@
 .wizard-theme[data-theme-preview="dark"]   i { background: #1c2027; }
 .wizard-theme[data-theme-preview="navy"]   i { background: #14202e; }
 .wizard-theme[data-theme-preview="amber"]  i { background: #201810; }
+.wizard-theme[data-theme-preview="red"]    i { background: #2b1014; }
 
 .wizard__footer {
   display: flex;

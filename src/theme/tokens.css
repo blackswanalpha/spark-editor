@@ -292,6 +292,56 @@
 }
 
 /* ===================================================================
+    THEME 5: RED / CRIMSON
+    Dark crimson theme — deep maroon surfaces with a red accent.
+    Selectable via TitleBar theme menu + welcome wizard.
+    =================================================================== */
+:root[data-theme="red"] {
+  color-scheme: dark;
+
+  --bg:           #1c0a0e;
+  --surface-1:    #260f13;
+  --surface-2:    #33141a;
+  --surface-3:    #441a22;
+  --surface-4:    #57202b;
+  --border:       #6b2733;
+  --border-strong:#8a3342;
+
+  --text:        #ffe9ec;
+  --text-muted:  #d9a3ab;
+  --text-faint:  #a9737c;
+  --on-accent:   #2a0508;
+
+  --accent:        #ef5350;
+  --accent-hover:  #ff6f6c;
+  --accent-active: #e53935;
+  --accent-soft:   #4a1420;
+  --accent-fg:     #2a0508;
+
+  --success:     #4ade80;
+  --warning:     #fbbf24;
+  --danger:      #ff8a80;
+  --info:        #ef9a9a;
+
+  --selection:   rgba(239, 83, 80, 0.25);
+  --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.6);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.55);
+  --shadow-3: 0 12px 40px rgba(0, 0, 0, 0.7);
+
+  --syn-keyword: #ff8a80;
+  --syn-string:  #a5d6a7;
+  --syn-number:  #ffcc80;
+  --syn-comment: #a9737c;
+  --syn-func:    #ef9a9a;
+  --syn-tag:     #ff5252;
+  --syn-type:    #ffe082;
+  --syn-regex:   #ffab91;
+  --syn-attr:    #f48fb1;
+}
+
+/* ===================================================================
     SYSTEM: when data-theme="system", follow OS via prefers-color-scheme.
    Maps to the dark tokens (it would be equivalent to light too if the
    user prefers light — see the @media blocks below).

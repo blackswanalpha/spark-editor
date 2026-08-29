@@ -22,6 +22,7 @@ const THEME_OPTIONS: { id: ThemeId; label: string; hint: string }[] = [
   { id: "dark", label: "Dark", hint: "Low-glare surfaces" },
   { id: "navy", label: "Navy", hint: "Deep blue focus" },
   { id: "amber", label: "Amber", hint: "Warm retro CRT" },
+  { id: "red", label: "Red", hint: "Crimson night" },
 ];
 
 export interface WelcomeWizardProps {
