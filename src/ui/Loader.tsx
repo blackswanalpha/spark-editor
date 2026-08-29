@@ -44,3 +44,29 @@ export function ProgressBar({ value, max = 100 }: { value: number; max?: number 
     </div>
   );
 }
+
+/**
+ * Full-surface waiting overlay for long-running host work on the other
+ * side of the IPC bridge (see designlabs/labs/loader.html). Use for
+ * indeterminate work where the surrounding UI must appear inert.
+ */
+export function LoaderOverlay({ message, blocking = false }: { message?: string; blocking?: boolean }) {
+  return (
+    <motion.div
+      className="loader-overlay"
+      data-blocking={blocking || undefined}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      role="status"
+      aria-live="polite"
+      aria-label={message || "Loading"}
+    >
+      <div className="loader-overlay__box">
+        <Spinner size={22} />
+        {message && <span className="loader-overlay__msg">{message}</span>}
+      </div>
+    </motion.div>
+  );
+}

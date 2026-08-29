@@ -17,7 +17,7 @@ export async function getHighlighter(): Promise<Highlighter> {
   if (highlighter) return highlighter;
   if (!initPromise) {
     initPromise = createHighlighter({
-      themes: [themeTokens.light, themeTokens.dark, themeTokens.navy] as unknown as BundledTheme[],
+      themes: [themeTokens.light, themeTokens.dark, themeTokens.navy, themeTokens.amber, themeTokens.red] as unknown as BundledTheme[],
       langs: LANGS,
     }).then((h) => { highlighter = h; return h; });
   }
@@ -43,9 +43,16 @@ export function resolveLang(name?: string): string {
 
 export interface HighlightResult { html: string; bg: string; fg: string }
 
-export async function highlight(code: string, lang?: string, theme: "light" | "dark" | "navy" = "dark"): Promise<HighlightResult> {
+export type HighlightThemeId = "light" | "dark" | "navy" | "amber" | "red";
+
+export async function highlight(code: string, lang?: string, theme: HighlightThemeId = "dark"): Promise<HighlightResult> {
   const h = await getHighlighter();
-  const t = theme === "light" ? themeTokens.light : theme === "navy" ? themeTokens.navy : themeTokens.dark;
+  const t =
+    theme === "light" ? themeTokens.light :
+    theme === "navy" ? themeTokens.navy :
+    theme === "amber" ? themeTokens.amber :
+    theme === "red" ? themeTokens.red :
+    themeTokens.dark;
   const result = h.codeToHtml(code, { lang: resolveLang(lang) as BundledLanguage, theme: t as unknown as BundledTheme });
   // Extract the wrapper's background/foreground for inline placement
   const tmp = document.createElement("div");

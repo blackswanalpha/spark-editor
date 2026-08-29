@@ -3,6 +3,7 @@
    Shell layout.
    ============================================================ */
 .app {
+  position: relative;
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   grid-template-columns: 51px auto 1fr;

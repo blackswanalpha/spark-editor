@@ -19,6 +19,7 @@ export default defineConfig({
       "@ir":         path.resolve(__dirname, "./src/ir"),
       "@lib":        path.resolve(__dirname, "./src/lib"),
       "@commands":   path.resolve(__dirname, "./src/commands"),
+      "@version":    path.resolve(__dirname, "./src/version"),
     },
   },
   clearScreen: false,

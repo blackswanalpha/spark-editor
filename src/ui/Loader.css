@@ -27,3 +27,40 @@
   background: var(--accent);
   border-radius: var(--radius-pill);
 }
+
+/* ---------- LoaderOverlay ---------- */
+.loader-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+.loader-overlay[data-blocking] {
+  pointer-events: auto;
+}
+.loader-overlay__box {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2, 8px);
+  padding: var(--sp-3, 12px) var(--sp-4, 16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 25%, transparent);
+}
+.loader-overlay__msg {
+  font-size: var(--size-sm);
+  color: var(--text-muted);
+  font-family: var(--font-code);
+}
+
+/* ---------- Reduced motion (docs/audits/standards.md, system prefs) ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.5s; }
+  .dots .dot { animation: none !important; opacity: 0.7; }
+  .loader-overlay { transition: none; }
+}

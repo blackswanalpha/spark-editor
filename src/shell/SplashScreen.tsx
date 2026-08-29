@@ -1,17 +1,30 @@
 /* ============================================================
    sparkEditor · src/shell/SplashScreen.tsx
    Boot overlay shown while the renderer initialises.
-   Three stages: "Loading assets…" → "Building index…" → "Ready"
+   Stages mirror the boot sequence (docs/explanation/
+   state-and-persistence.md): assets → theme → IPC bridge →
+   state.json → session restore → ready.
+
+   The splash dismisses only when BOTH conditions hold:
+     • the minimum-duration animation ran out, and
+     • `ready` is not false (when the caller passes `ready`,
+       boot completion gates the fade — no fake progress).
    ============================================================ */
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "@motion/index";
-import { splashVariants, splashLogoVariants, splashBarVariants } from "@motion/index";
+import { splashVariants, splashLogoVariants } from "@motion/index";
 import { ProgressBar } from "@ui/Loader";
+import { APP_VERSION } from "@version";
 import "./SplashScreen.css";
 
 export interface SplashScreenProps {
   /** Force-show the splash. When omitted, auto-hides after `minDuration`. */
   show?: boolean;
+  /**
+   * Boot-completion gate from the caller. While `false` the splash stays
+   * on screen even after `minDuration`. Omit for a pure timer splash.
+   */
+  ready?: boolean;
   /** Minimum time the splash stays on screen (ms). Default 1100. */
   minDuration?: number;
   /** Called once the splash has finished fading out. */
@@ -19,18 +32,21 @@ export interface SplashScreenProps {
 }
 
 const STAGES = [
-  "Loading assets…",
-  "Building index…",
-  "Restoring session…",
-  "Ready",
+  "loading assets…",
+  "applying theme…",
+  "connecting IPC bridge…",
+  "reading state.json…",
+  "restoring session…",
+  "ready",
 ] as const;
 
-export function SplashScreen({ show, minDuration = 1100, onDone }: SplashScreenProps) {
+export function SplashScreen({ show, ready, minDuration = 1100, onDone }: SplashScreenProps) {
   const [stage, setStage] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [timerDone, setTimerDone] = useState(false);
   const [internalShow, setInternalShow] = useState(true);
 
-  // Drive stage + progress regardless of "show" prop
+  // Drive stage + progress regardless of the "show" prop
   useEffect(() => {
     if (show === false) return;
     const start = performance.now();
@@ -39,16 +55,26 @@ export function SplashScreen({ show, minDuration = 1100, onDone }: SplashScreenP
       const elapsed = t - start;
       const pct = Math.min(1, elapsed / minDuration);
       setProgress(pct);
-      if (pct < 0.3) setStage(0);
-      else if (pct < 0.55) setStage(1);
-      else if (pct < 0.85) setStage(2);
-      else setStage(3);
+      if (pct < 0.2) setStage(0);
+      else if (pct < 0.4) setStage(1);
+      else if (pct < 0.6) setStage(2);
+      else if (pct < 0.8) setStage(3);
+      else if (pct < 1) setStage(4);
+      else setStage(5);
       if (pct < 1) raf = requestAnimationFrame(tick);
+      else setTimerDone(true);
     };
     raf = requestAnimationFrame(tick);
-    const t = setTimeout(() => setInternalShow(false), minDuration);
-    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+    return () => cancelAnimationFrame(raf);
   }, [show, minDuration]);
+
+  const bootDone = ready !== false;
+
+  /* Hide once the minimum-duration animation has run out AND the
+     caller reports boot complete (when the `ready` gate is used). */
+  useEffect(() => {
+    if (show === undefined && timerDone && bootDone) setInternalShow(false);
+  }, [show, timerDone, bootDone]);
 
   const visible = show === true || (show === undefined && internalShow);
 
@@ -84,7 +110,7 @@ export function SplashScreen({ show, minDuration = 1100, onDone }: SplashScreenP
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
           >
-            {STAGES[stage]}
+            v{APP_VERSION} · {STAGES[stage]}
           </motion.div>
         </motion.div>
       )}

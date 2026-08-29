@@ -4,6 +4,20 @@ Chronological build log. Each entry is dated, scoped, and linked to the Changelo
 
 ---
 
+## 2026-08-29 — Release 0.3.2: red theme (+ boot experience from #14)
+
+- **Scope:** `src/theme/{tokens.css,ThemeProvider.tsx}`, `src/shell/{TitleBar.tsx,TitleBar.css,WelcomeWizard.tsx,WelcomeWizard.css}`, `src/lib/{themeTokens.ts,shiki.ts}`, `package.json`, `src-tauri/{tauri.conf.json,Cargo.toml,Cargo.lock}`, `changelog/{CHANGELOG.md,0.3.2.md}`, `worklog.md`.
+- **What:** Added the **red** theme (dark crimson: bg #1c0a0e, surfaces #260f13→#57202b, accent #ef5350) across all theme touchpoints — tokens, provider types/ORDER/resolve, TitleBar menu + 6th swatch (3×2 mini-grid fills exactly), welcome-wizard pick + preview swatch, and Shiki registration (`spark-red`, plus the previously missed `spark-amber`; `highlight()` now takes `HighlightThemeId`). Version bumped 0.3.1 → 0.3.2 so the release also ships the boot-experience work merged from `feature/boot-experience-screens` (#14): real-stage splash, welcome wizard + onboarding, loader overlay, and the updater missing-platform fix (release workflow now guarantees `linux-x86_64` in `latest.json`).
+- **Decisions:** Red is a dark theme (pairs with navy=dark-blue, amber=light-warm) so the set spans dark blue / light warm / dark red. Amber's missing Shiki registration was fixed in passing while touching the highlight bridge.
+- **Verification:** `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`; `cargo update -p spark-editor --offline` synced the lock at 0.3.2.
+
+## 2026-08-28 — Boot experience: splash / loader / first-run setup + updater platform fix
+
+- **Scope:** `src/shell/{SplashScreen,WelcomeWizard,Onboarding,firstRun}.{tsx,ts,css}`, `src/ui/{Loader.tsx,Loader.css}`, `src/App.tsx`, `src/App.css`, `src/version.ts`, `src/bridge/updater.ts`, `src/commands/registry.ts`, `tsconfig.json`, `vite.config.ts`, `.github/workflows/release.yml`, `changelog/CHANGELOG.md`.
+- **What:** Ported the boot-experience designlabs (`labs/splash.html`, `labs/loader.html`, `labs/onboarding.html`) to the React shell. Splash stages now track the real boot (theme → IPC → state.json → session → ready), show `v{version}` (`src/version.ts` from `package.json`), and dismiss on boot completion via a `ready` gate instead of a fixed timer. New first-run flow: `spark.onboarded` localStorage flag + `shouldShowWelcome()` (no recents, no docs, never onboarded) opens a 3-step welcome wizard (intro → live theme pick across all 5 themes → ready); the no-docs empty state became `OnboardingScreen` with action cards + recents; re-openable via Help → Show Welcome Screen. `LoaderOverlay` added for indeterminate host work; `prefers-reduced-motion` honoured in loader/wizard/onboarding CSS. Updater: extracted `classifyUpdaterError()` so the missing-`linux-x86_64`-in-`latest.json` failure (`None of the fallback platforms ["linux-x86_64"] …`) is handled as a friendly "No update available for this platform yet" instead of "Update check failed"; release workflow installs `libfuse2`, pins `--bundles appimage,deb` on Linux, and `verify-ota` now fails the release if `latest.json` lacks `linux-x86_64`.
+- **Decisions:** First-run flag lives in localStorage (renderer-side analogue of `state.json` first-run defaults per `docs/reference/app-state.md`) — a host-side `app_state_get` bridge is the seam for a future migration. Boot gate (`bootReady`) is computed in `App.tsx` so the splash never lies about progress.
+- **Verification:** Reproduced the updater error live (`--log-to-stderr`: `Searching for updater target 'linux-x86_64' in release data` → miss) against the v0.3.1 manifest; `npm run typecheck`, `npm run lint` (no new errors), `npm test` (29 passed incl. new `updater.test.ts` + `firstRun.test.ts`), `npm run tauri build` (.deb 0.3.1 bundled; app boots).
+
 ## 2026-08-27 — File explorer port from designlabs
 
 - **Scope:** `src/shell/SideBar.tsx`, `src/shell/SideBar.css`, `src/store/explorer.ts`, `src/bridge/{commands,events}.ts`, `src-tauri/src/lib.rs`, `docs/reference/{renderer-modules,host-commands}.md`, `changelog/CHANGELOG.md`.

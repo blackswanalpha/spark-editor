@@ -9,18 +9,18 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { listen } from "@tauri-apps/api/event";
 
-export type ThemeId = "light" | "dark" | "navy" | "amber" | "system";
+export type ThemeId = "light" | "dark" | "navy" | "amber" | "red" | "system";
 
 type ThemeCtx = {
   theme: ThemeId;
-  resolved: "light" | "dark" | "navy" | "amber"; // navy/amber never collapse
+  resolved: "light" | "dark" | "navy" | "amber" | "red"; // navy/amber/red never collapse
   setTheme: (t: ThemeId) => void;
   cycle: () => void;
 };
 
 const Ctx = createContext<ThemeCtx | null>(null);
 
-const ORDER: ThemeId[] = ["light", "dark", "navy", "amber", "system"];
+const ORDER: ThemeId[] = ["light", "dark", "navy", "amber", "red", "system"];
 const STORE_KEY = "spark.theme";
 const STORE_FILE = "settings.json";
 
@@ -53,9 +53,10 @@ function systemPrefers(): "light" | "dark" {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function resolveTheme(t: ThemeId): "light" | "dark" | "navy" | "amber" {
+function resolveTheme(t: ThemeId): "light" | "dark" | "navy" | "amber" | "red" {
   if (t === "navy") return "navy";
   if (t === "amber") return "amber";
+  if (t === "red") return "red";
   if (t === "light" || t === "dark") return t;
   return systemPrefers();
 }
@@ -65,7 +66,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === "undefined") return "system";
     return readLocal();
   });
-  const [resolved, setResolved] = useState<"light" | "dark" | "navy" | "amber">(() => resolveTheme(theme));
+  const [resolved, setResolved] = useState<"light" | "dark" | "navy" | "amber" | "red">(() => resolveTheme(theme));
 
   // Apply to <html> on every change
   useEffect(() => {

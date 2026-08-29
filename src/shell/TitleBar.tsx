@@ -20,13 +20,14 @@ export interface TitleBarProps {
   platform?: "macos" | "windows" | "linux";
 }
 
-type ThemeId = "light" | "dark" | "navy" | "amber" | "system";
+type ThemeId = "light" | "dark" | "navy" | "amber" | "red" | "system";
 
 const THEME_OPTIONS: { id: ThemeId; label: string }[] = [
   { id: "light", label: "Light" },
   { id: "dark", label: "Dark" },
   { id: "navy", label: "Navy" },
   { id: "amber", label: "Amber" },
+  { id: "red", label: "Red" },
   { id: "system", label: "System" },
 ];
 
@@ -86,6 +87,7 @@ export function TitleBar({ title = "Untitled", dirty, platform = "windows" }: Ti
                 <span className={`titlebar__swatch titlebar__swatch--dark${theme === "dark" ? " titlebar__swatch--active" : ""}`} />
                 <span className={`titlebar__swatch titlebar__swatch--navy${theme === "navy" ? " titlebar__swatch--active" : ""}`} />
                 <span className={`titlebar__swatch titlebar__swatch--amber${theme === "amber" ? " titlebar__swatch--active" : ""}`} />
+                <span className={`titlebar__swatch titlebar__swatch--red${theme === "red" ? " titlebar__swatch--active" : ""}`} />
                 <span className={`titlebar__swatch titlebar__swatch--system${theme === "system" ? " titlebar__swatch--active" : ""}`} />
               </span>
             </motion.button>
