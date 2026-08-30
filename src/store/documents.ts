@@ -102,57 +102,67 @@ export const useDocs = create<State & Actions>((set, get) => ({
   },
 
   close: (id) => set((s) => {
+    if (!s.docs[id]) return s;
     const { [id]: _unusedDoc, ...rest } = s.docs;
     const { [id]: _unusedHist, ...histRest } = s.history;
+    const closedIndex = s.order.indexOf(id);
     const order = s.order.filter((x) => x !== id);
-    return {
-      docs: rest,
-      history: histRest,
-      order,
-      active: s.active === id ? (order[order.length - 1] ?? null) : s.active,
-    };
+    // Focus the neighbour, the way every tabbed editor does. Jumping to
+    // the last tab loses the user's place when they close a middle tab.
+    const nextActive =
+      s.active === id ? (order[Math.min(closedIndex, order.length - 1)] ?? null) : s.active;
+    return { docs: rest, history: histRest, order, active: nextActive };
   }),
 
-  setActive: (id) => set({ active: id }),
+  setActive: (id) => set((s) => (s.docs[id] ? { active: id } : s)),
 
-  setMode: (id, mode) => set((s) => ({
-    docs: { ...s.docs, [id]: { ...s.docs[id], mode } },
-  })),
+  setMode: (id, mode) => set((s) => (
+    s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], mode } } } : s
+  )),
 
   setRaw: (id, raw) => {
     const before = get().docs[id];
     if (!before || before.raw === raw) return;
-    set((s) => ({
-      docs: {
-        ...s.docs,
-        [id]: { ...s.docs[id], raw, dirty: true },
-      },
-      history: {
-        ...s.history,
-        [id]: { past: [...s.history[id].past, { ir: before.ir, raw: before.raw }].slice(-100), future: [] },
-      },
-    }));
+    set((s) => {
+      // Re-check inside the updater: the doc can be closed between the
+      // read above and this commit (an editor's debounced onChange racing
+      // a tab close).
+      const current = s.docs[id];
+      if (!current) return s;
+      const past = s.history[id]?.past ?? [];
+      return {
+        docs: { ...s.docs, [id]: { ...current, raw, dirty: true } },
+        history: {
+          ...s.history,
+          [id]: { past: [...past, { ir: current.ir, raw: current.raw }].slice(-100), future: [] },
+        },
+      };
+    });
   },
 
   setIr: (id, ir) => {
-    const before = get().docs[id];
-    if (!before) return;
-    set((s) => ({
-      docs: { ...s.docs, [id]: { ...s.docs[id], ir, dirty: true } },
-      history: {
-        ...s.history,
-        [id]: { past: [...s.history[id].past, { ir: before.ir, raw: before.raw }].slice(-100), future: [] },
-      },
-    }));
+    if (!get().docs[id]) return;
+    set((s) => {
+      const current = s.docs[id];
+      if (!current) return s;
+      const past = s.history[id]?.past ?? [];
+      return {
+        docs: { ...s.docs, [id]: { ...current, ir, dirty: true } },
+        history: {
+          ...s.history,
+          [id]: { past: [...past, { ir: current.ir, raw: current.raw }].slice(-100), future: [] },
+        },
+      };
+    });
   },
 
-  setCursor: (id, c) => set((s) => ({
-    docs: { ...s.docs, [id]: { ...s.docs[id], cursor: c } },
-  })),
+  setCursor: (id, c) => set((s) => (
+    s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], cursor: c } } } : s
+  )),
 
-  markClean: (id) => set((s) => ({
-    docs: { ...s.docs, [id]: { ...s.docs[id], dirty: false } },
-  })),
+  markClean: (id) => set((s) => (
+    s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], dirty: false } } } : s
+  )),
 
   undo: (id) => set((s) => {
     const h = s.history[id];
@@ -176,20 +186,28 @@ export const useDocs = create<State & Actions>((set, get) => ({
     };
   }),
 
-  setName: (id, name) => set((s) => ({ docs: { ...s.docs, [id]: { ...s.docs[id], name } } })),
-  setPath: (id, path) => set((s) => ({ docs: { ...s.docs, [id]: { ...s.docs[id], path } } })),
+  setName: (id, name) => set((s) => (
+    s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], name } } } : s
+  )),
+  setPath: (id, path) => set((s) => (
+    s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], path } } } : s
+  )),
 
   saveDocument: async (id) => {
     const doc = get().docs[id];
     if (!doc) return { ok: false, reason: "no-active-doc" };
     if (doc.path == null) return { ok: false, reason: "no-path" };
+    const path = doc.path;
+    const written = doc.raw;
     try {
-      await writeFile(doc.path, doc.raw);
-      get().setPath(id, doc.path);
-      get().setName(id, basename(doc.path));
-      get().markClean(id);
-      await recentsAdd(doc.path);
-      return { ok: true, path: doc.path };
+      await writeFile(path, written);
+      // Only clean when the buffer still matches what reached disk. Edits
+      // made while the write was in flight must stay dirty, or they are
+      // silently dropped on the next close.
+      if (get().docs[id]?.raw === written) get().markClean(id);
+      get().setName(id, basename(path));
+      await recentsAdd(path).catch(() => {});
+      return { ok: true, path };
     } catch (error) {
       return { ok: false, reason: "error", error };
     }
@@ -203,12 +221,15 @@ export const useDocs = create<State & Actions>((set, get) => ({
       filters: opts?.filters,
     });
     if (path == null || path === "") return { ok: false, reason: "cancelled" };
+    // Read the buffer *after* the dialog resolves: the user may have kept
+    // typing while it was open, and `doc` above is a pre-dialog snapshot.
+    const written = get().docs[id]?.raw ?? doc.raw;
     try {
-      await writeFile(path, doc.raw);
+      await writeFile(path, written);
       get().setPath(id, path);
       get().setName(id, basename(path));
-      get().markClean(id);
-      await recentsAdd(path);
+      if (get().docs[id]?.raw === written) get().markClean(id);
+      await recentsAdd(path).catch(() => {});
       return { ok: true, path };
     } catch (error) {
       return { ok: false, reason: "error", error };

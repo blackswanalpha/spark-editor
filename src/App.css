@@ -6,12 +6,15 @@
   position: relative;
   display: grid;
   grid-template-rows: auto auto 1fr auto;
-  grid-template-columns: 51px auto 1fr;
+  /* The explorer column is `auto` so it takes exactly the inline width the
+     pane carries; the resizer is its own fixed column so hit-testing the
+     drag target never depends on the pane's width. */
+  grid-template-columns: 51px auto 6px 1fr;
   grid-template-areas:
-    "titlebar titlebar titlebar"
-    "menubar  menubar  menubar"
-    "rail     sidebar  main"
-    "status   status   status";
+    "titlebar titlebar titlebar  titlebar"
+    "menubar  menubar  menubar   menubar"
+    "rail     sidebar  resizer   main"
+    "status   status   status    status";
   height: 100vh;
   width: 100vw;
   background: var(--bg);
@@ -27,6 +30,93 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  /* Width comes from the inline style the resize hook drives. */
+  flex-shrink: 0;
+}
+
+/* ---------- Explorer resize handle ----------
+   A 6px column that widens its hit area with a pseudo-element, so the
+   grab target is comfortable without a visible 12px gutter. */
+.app__sidebar-resizer {
+  grid-area: resizer;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  outline: none;
+  z-index: 2;
+}
+
+.app__sidebar-resizer::after {
+  /* Extends the pointer target either side of the visible line. */
+  content: "";
+  position: absolute;
+  inset: 0 -4px;
+}
+
+.app__sidebar-resizer-grip {
+  position: absolute;
+  inset: 0 auto 0 2px;
+  width: 2px;
+  background: var(--border);
+  transition: background var(--t-fast, 120ms) ease;
+}
+
+.app__sidebar-resizer:hover .app__sidebar-resizer-grip,
+.app__sidebar-resizer:focus-visible .app__sidebar-resizer-grip,
+.app__sidebar-resizer.is-dragging .app__sidebar-resizer-grip {
+  background: var(--accent);
+}
+
+.app__sidebar-resizer:focus-visible {
+  box-shadow: var(--focus-ring);
+  border-radius: 2px;
+}
+
+/* Collapsed: the handle stays draggable and grows a reveal button so the
+   explorer is recoverable by pointer, not only by Ctrl+B. */
+.app__sidebar-resizer.is-collapsed {
+  cursor: ew-resize;
+}
+
+.app__sidebar-reveal {
+  position: absolute;
+  top: 8px;
+  left: 4px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--t-fast, 120ms) ease;
+}
+
+.app__sidebar-resizer.is-collapsed:hover .app__sidebar-reveal,
+.app__sidebar-resizer.is-collapsed:focus-within .app__sidebar-reveal {
+  opacity: 1;
+}
+
+.app__sidebar-reveal:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* While dragging, stop the pointer from selecting text or landing on the
+   iframe/editor underneath. */
+body:has(.app__sidebar-resizer.is-dragging) {
+  cursor: col-resize;
+  user-select: none;
+}
+body:has(.app__sidebar-resizer.is-dragging) iframe {
+  pointer-events: none;
 }
 .app__main    { grid-area: main; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface-1); position: relative; }
 .app__status-wrap { display: contents; }

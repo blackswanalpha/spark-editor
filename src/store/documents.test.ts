@@ -151,3 +151,71 @@ describe("saveAllDirty", () => {
     expect(mockedWriteFile).toHaveBeenCalledWith("/a.md", "a body");
   });
 });
+
+describe("document store — lifecycle races", () => {
+  beforeEach(() => {
+    useDocs.setState({ docs: {}, order: [], active: null, history: {} });
+  });
+
+  it("ignores writes to a document that was already closed", () => {
+    // An editor's debounced onChange can land after the tab closed. The
+    // unguarded spread used to resurrect a half-built ghost document.
+    const id = useDocs.getState().open({ name: "a.md", raw: "one" });
+    useDocs.getState().close(id);
+
+    useDocs.getState().setRaw(id, "two");
+    useDocs.getState().setCursor(id, { line: 9, col: 9 });
+    useDocs.getState().setMode(id, "code");
+    useDocs.getState().markClean(id);
+    useDocs.getState().setName(id, "ghost");
+    useDocs.getState().setPath(id, "/ghost");
+
+    expect(useDocs.getState().docs[id]).toBeUndefined();
+    expect(useDocs.getState().order).toEqual([]);
+  });
+
+  it("does not crash when history was dropped but the doc remains", () => {
+    const id = useDocs.getState().open({ name: "a.md", raw: "one" });
+    // Simulate a torn state: doc present, history gone.
+    useDocs.setState((s) => ({ ...s, history: {} }));
+    expect(() => useDocs.getState().setRaw(id, "two")).not.toThrow();
+    expect(useDocs.getState().docs[id].raw).toBe("two");
+  });
+
+  it("setActive refuses an id that is not open", () => {
+    const id = useDocs.getState().open({ name: "a.md" });
+    useDocs.getState().setActive("doc-does-not-exist");
+    expect(useDocs.getState().active).toBe(id);
+  });
+
+  it("closing a middle tab focuses its neighbour, not the last tab", () => {
+    const a = useDocs.getState().open({ name: "a.md" });
+    const b = useDocs.getState().open({ name: "b.md" });
+    const c = useDocs.getState().open({ name: "c.md" });
+    useDocs.getState().setActive(b);
+    useDocs.getState().close(b);
+    expect(useDocs.getState().active).toBe(c);
+    expect(useDocs.getState().order).toEqual([a, c]);
+  });
+
+  it("closing the last tab falls back to the new last", () => {
+    const a = useDocs.getState().open({ name: "a.md" });
+    const b = useDocs.getState().open({ name: "b.md" });
+    useDocs.getState().setActive(b);
+    useDocs.getState().close(b);
+    expect(useDocs.getState().active).toBe(a);
+  });
+
+  it("closing the only tab clears the active id", () => {
+    const a = useDocs.getState().open({ name: "a.md" });
+    useDocs.getState().close(a);
+    expect(useDocs.getState().active).toBeNull();
+  });
+
+  it("closing twice is a no-op", () => {
+    const a = useDocs.getState().open({ name: "a.md" });
+    useDocs.getState().close(a);
+    expect(() => useDocs.getState().close(a)).not.toThrow();
+    expect(useDocs.getState().order).toEqual([]);
+  });
+});

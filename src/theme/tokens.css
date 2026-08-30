@@ -141,6 +141,13 @@
   --syn-type:    #1f4a9c;
   --syn-regex:   #b25e09;
   --syn-attr:    #6f4e37;
+
+  /* Terminal surface — the PTY grid resolves colours host-side and
+     only asks the theme for the ground it paints on. */
+  --term-bg:        #1b1f26;
+  --term-fg:        #e6e9ee;
+  --term-cursor:    #6d9bff;
+  --term-selection: rgba(109, 155, 255, 0.30);
 }
 
 /* ===================================================================
@@ -189,6 +196,13 @@
   --syn-type:    #ffa657;
   --syn-regex:   #f97583;
   --syn-attr:    #b392f0;
+
+  /* Terminal surface — the PTY grid resolves colours host-side and
+     only asks the theme for the ground it paints on. */
+  --term-bg:        #14171c;
+  --term-fg:        #e6e9ee;
+  --term-cursor:    #6d9bff;
+  --term-selection: rgba(109, 155, 255, 0.30);
 }
 
 /* ===================================================================
@@ -239,6 +253,13 @@
   --syn-type:    #ffcb6b;
   --syn-regex:   #f78c6c;
   --syn-attr:    #c792ea;
+
+  /* Terminal surface — the PTY grid resolves colours host-side and
+     only asks the theme for the ground it paints on. */
+  --term-bg:        #0a1628;
+  --term-fg:        #eaf2ff;
+  --term-cursor:    #4dd0e1;
+  --term-selection: rgba(77, 208, 225, 0.30);
 }
 
 /* ===================================================================
@@ -289,6 +310,13 @@
   --syn-type:    #92400e;
   --syn-regex:   #b45309;
   --syn-attr:    #78350f;
+
+  /* Terminal surface — the PTY grid resolves colours host-side and
+     only asks the theme for the ground it paints on. */
+  --term-bg:        #2a1d05;
+  --term-fg:        #fff7e6;
+  --term-cursor:    #d97706;
+  --term-selection: rgba(217, 119, 6, 0.30);
 }
 
 /* ===================================================================
@@ -339,6 +367,13 @@
   --syn-type:    #ffe082;
   --syn-regex:   #ffab91;
   --syn-attr:    #f48fb1;
+
+  /* Terminal surface — the PTY grid resolves colours host-side and
+     only asks the theme for the ground it paints on. */
+  --term-bg:        #1c0a0e;
+  --term-fg:        #ffe9ec;
+  --term-cursor:    #ef5350;
+  --term-selection: rgba(239, 83, 80, 0.30);
 }
 
 /* ===================================================================
@@ -364,6 +399,8 @@
     --syn-keyword: #d2a8ff; --syn-string: #7ee787; --syn-number: #ffb86b;
     --syn-comment: #6c7686; --syn-func: #79c0ff; --syn-tag: #ff7b72;
     --syn-type: #ffa657; --syn-regex: #f97583; --syn-attr: #b392f0;
+    --term-bg: #14171c; --term-fg: #e6e9ee; --term-cursor: #6d9bff;
+    --term-selection: rgba(109, 155, 255, 0.30);
   }
 }
 
@@ -385,6 +422,8 @@
     --syn-keyword: #a626a4; --syn-string: #1a7f37; --syn-number: #b25e09;
     --syn-comment: #8b93a1; --syn-func: #2f6bde; --syn-tag: #c62828;
     --syn-type: #1f4a9c; --syn-regex: #b25e09; --syn-attr: #6f4e37;
+    --term-bg: #1b1f26; --term-fg: #e6e9ee; --term-cursor: #6d9bff;
+    --term-selection: rgba(109, 155, 255, 0.30);
   }
 }
 

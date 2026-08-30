@@ -9,7 +9,7 @@ import { motion } from "@motion/index";
 import { Button } from "@ui/Button";
 import { Icon } from "@ui/Icon";
 import { staggerParent, staggerItem } from "@motion/index";
-import { APP_VERSION } from "@version";
+import { useAppVersion } from "@version";
 import "./Onboarding.css";
 
 export interface OnboardingScreenProps {
@@ -29,6 +29,7 @@ export function OnboardingScreen({
   onOpenRecent,
   onPalette,
 }: OnboardingScreenProps) {
+  const version = useAppVersion();
   return (
     <motion.div
       className="onboard"
@@ -98,7 +99,7 @@ export function OnboardingScreen({
           Command palette
         </Button>
       </motion.div>
-      <motion.div variants={staggerItem} className="onboard__version">v{APP_VERSION}</motion.div>
+      <motion.div variants={staggerItem} className="onboard__version">v{version}</motion.div>
     </motion.div>
   );
 }

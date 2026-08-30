@@ -95,7 +95,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0, token: ${{ secrets.GITHUB_TOKEN }} }
+        # The expression must be quoted: inside a YAML flow mapping the bare
+        # `${{` opens a second mapping and the whole file fails to parse, which
+        # is why every run of this workflow died at startup with "workflow file
+        # issue" and 0s duration.
+        with: { fetch-depth: 0, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"

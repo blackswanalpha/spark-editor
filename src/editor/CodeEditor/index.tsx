@@ -155,9 +155,12 @@ export function CodeEditor({ docId, onCursor }: Props) {
 
   // Remember the current language so the fallback comment-toggle
   // command can pick the right prefix.
+  // Content sniffing only matters for the first read of an extensionless
+  // file, so this is keyed on name/language and re-runs when they change.
   const currentLangId = useMemo(
     () => langIdOf(doc?.name ?? "", doc?.language, doc?.raw ?? "") ?? "",
-    [doc?.name, doc?.language, doc?.raw],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [doc?.name, doc?.language],
   );
   useEffect(() => {
     wordWrapByDoc.set("__lang__", currentLangId);
@@ -242,14 +245,36 @@ export function CodeEditor({ docId, onCursor }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docId]);
 
-  /* -- Language swap when the doc's name or language changes -- */
+  /* -- Language swap when the doc's name or language changes --
+     Deliberately NOT keyed on doc.raw: content is only a tie-breaker for
+     extensionless files, and depending on it re-ran langFor() and
+     reconfigured the language compartment on every keystroke, re-parsing
+     the whole document each character. */
   useEffect(() => {
     const v = viewRef.current;
     if (!v || !doc) return;
     v.dispatch({
-      effects: langComp.reconfigure(langFor(doc.name, doc.language, doc.raw)),
+      effects: langComp.reconfigure(langFor(doc.name, doc.language, v.state.doc.toString())),
     });
-  }, [doc?.language, doc?.name, doc?.raw]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc?.language, doc?.name]);
+
+  /* -- Adopt changes the store made behind the editor's back --
+     undo/redo, Revert File, and any future external reload write to the
+     store; without this the view kept showing the old text and the next
+     keystroke wrote it straight back. */
+  useEffect(() => {
+    const v = viewRef.current;
+    if (!v || doc?.raw == null) return;
+    const current = v.state.doc.toString();
+    if (current === doc.raw) return;
+    // Hold the cursor where it was, clamped to the new length.
+    const anchor = Math.min(v.state.selection.main.anchor, doc.raw.length);
+    v.dispatch({
+      changes: { from: 0, to: current.length, insert: doc.raw },
+      selection: { anchor },
+    });
+  }, [doc?.raw]);
 
   /* -- Theme swap -------------------------------------------- */
   useEffect(() => {
