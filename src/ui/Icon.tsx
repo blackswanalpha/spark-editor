@@ -62,6 +62,12 @@ import {
   ArrowSquareOut,
   Trash,
   ArrowsClockwise,
+  DeviceMobile,
+  Monitor,
+  Palette,
+  TextAa,
+  SlidersHorizontal,
+  ArrowCounterClockwise,
 } from "@phosphor-icons/react";
 import { DartIcon } from "./DartIcon";
 
@@ -119,6 +125,12 @@ const PHOSPHOR_MAP: Record<string, PhosphorComp> = {
   ArrowSquareOut,
   Trash,
   ArrowsClockwise,
+  DeviceMobile,
+  Monitor,
+  Palette,
+  TextAa,
+  SlidersHorizontal,
+  ArrowCounterClockwise,
 };
 
 const CUSTOM_MAP: Record<string, PhosphorComp> = {
@@ -182,6 +194,12 @@ const ALIAS: Record<string, keyof typeof PHOSPHOR_MAP | keyof typeof CUSTOM_MAP>
   external: "ArrowSquareOut",
   trash: "Trash",
   "arrows-clockwise": "ArrowsClockwise",
+  mobile: "DeviceMobile",
+  desktop: "Monitor",
+  palette: "Palette",
+  typography: "TextAa",
+  sliders: "SlidersHorizontal",
+  reset: "ArrowCounterClockwise",
 };
 
 export type LegacyIconName = keyof typeof ALIAS;

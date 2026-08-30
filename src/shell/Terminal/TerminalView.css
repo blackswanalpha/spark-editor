@@ -53,6 +53,19 @@
   background: var(--term-cursor);
   opacity: 0.85;
   pointer-events: none;
+}
+
+/* Shape comes from Settings → Terminal. Bar and underline keep the
+   cell's box for positioning and paint only part of it, so the cursor
+   never drifts from the column it marks. */
+.tv__cursor--bar {
+  background: linear-gradient(to right, var(--term-cursor) 0 2px, transparent 2px);
+}
+.tv__cursor--underline {
+  background: linear-gradient(to top, var(--term-cursor) 0 2px, transparent 2px);
+}
+
+.tv__cursor.is-blinking {
   animation: tv-blink 1.06s steps(2, start) infinite;
 }
 
@@ -66,7 +79,8 @@
 }
 
 /* Unfocused terminals show a hollow cursor so it is obvious which
-   surface keystrokes will reach. */
+   surface keystrokes will reach. This outranks the shape rules above
+   on purpose: "which pane has focus" matters more than the shape. */
 .tv:not(.is-focused) .tv__cursor {
   animation: none;
   background: transparent;

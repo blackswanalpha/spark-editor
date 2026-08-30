@@ -1,0 +1,37 @@
+/* ============================================================
+   sparkEditor · src/theme/density.css
+
+   Compact density. Settings → Appearance writes data-density onto
+   <html>; this file is the only place that reacts to it.
+
+   Only chrome shrinks — tab strip, menu bar, toolbars, tree rows,
+   status bar and the terminal panel's own bars. Content surfaces
+   (the editor, the terminal grid) keep their own font settings, so
+   density never fights the Editor and Terminal sections.
+   ============================================================ */
+
+:root[data-density="compact"] {
+  --sp-2: 6px;
+  --sp-3: 9px;
+  --sp-4: 12px;
+}
+
+:root[data-density="compact"] .menubar { height: 24px; }
+
+:root[data-density="compact"] .tab { height: 24px; }
+
+:root[data-density="compact"] .statusbar { height: 20px; }
+
+:root[data-density="compact"] .tree-item { padding: 1px 6px; }
+:root[data-density="compact"] .tree-root { padding: 4px var(--sp-2) 2px; }
+
+:root[data-density="compact"] .md-editor__toolbar { padding: 2px 6px; }
+:root[data-density="compact"] .code-editor__toolbar { height: 26px; }
+
+:root[data-density="compact"] .plugin-rail__inner { gap: 2px; padding: 4px; }
+:root[data-density="compact"] .plugin-rail__btn { width: 28px; height: 28px; }
+
+:root[data-density="compact"] .term__header { height: 34px; }
+:root[data-density="compact"] .term__tabs { height: 28px; }
+:root[data-density="compact"] .term__tab { height: 21px; }
+:root[data-density="compact"] .term__footer { height: 24px; }

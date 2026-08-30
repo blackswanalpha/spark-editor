@@ -1,0 +1,292 @@
+/* ============================================================
+   sparkEditor · src/shell/Settings/SettingsDialog.css
+   Two-column settings surface: section list, then the pane.
+
+   It does not reuse .dialog because the layout is different —
+   the nav column has to reach the full height of the sheet, and
+   the pane scrolls on its own so the section list stays put.
+   ============================================================ */
+
+/* Geometry is inline, from SettingsDialog.tsx: the sheet is draggable,
+   and `transform` belongs to the entrance animation, which would fight
+   any centring done with it. */
+.settings {
+  position: fixed;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  z-index: var(--z-modal);
+  overflow: hidden;
+}
+
+.settings__head {
+  position: relative;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.settings__head:active { cursor: grabbing; }
+
+.settings__title {
+  padding: 14px 44px 0 16px;
+  font-size: var(--size-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+.settings__desc {
+  padding: 2px 44px 0 16px;
+  color: var(--text-faint);
+  font-size: var(--size-sm);
+}
+.settings__close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.settings__close:hover { background: var(--surface-3); color: var(--text); }
+
+.settings__layout {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  min-height: 0;
+}
+
+/* ---------- Section list ---------- */
+
+.settings__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--border);
+  background: var(--surface-2);
+  overflow-y: auto;
+}
+
+.settings__navItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--size-sm);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.settings__navItem:hover { background: var(--surface-3); color: var(--text); }
+.settings__navItem:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+.settings__navItem.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---------- Pane ---------- */
+
+.settings__pane {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 20px;
+}
+
+.settings__sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.settings__sectionTitle {
+  font-size: var(--size-md);
+  font-weight: 600;
+  color: var(--text);
+}
+.settings__reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--size-xs);
+  font-family: inherit;
+  cursor: pointer;
+}
+.settings__reset:hover { background: var(--surface-3); color: var(--text); }
+
+.settings__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 260px);
+  gap: 16px;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.settings__row:last-child { border-bottom: none; }
+
+.settings__rowLabel { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.settings__label { font-size: var(--size-sm); color: var(--text); font-weight: 500; }
+.settings__hint {
+  font-size: var(--size-xs);
+  color: var(--text-faint);
+  line-height: 1.45;
+}
+
+.settings__control {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.settings__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+
+/* ---------- Segmented control ---------- */
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  max-width: 100%;
+}
+.seg--wrap { flex-wrap: wrap; gap: 2px; justify-content: flex-end; }
+
+.seg__item {
+  height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--size-xs);
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.seg__item:hover { color: var(--text); }
+.seg__item:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+.seg__item.is-active {
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-weight: 600;
+}
+
+/* ---------- Switch ---------- */
+
+.switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-3);
+  cursor: pointer;
+  padding: 0;
+  transition: background 120ms var(--ease, ease-out);
+}
+.switch:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+.switch.is-on { background: var(--accent); border-color: var(--accent); }
+
+.switch__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface-1);
+  transition: transform 120ms var(--ease, ease-out);
+}
+.switch.is-on .switch__knob { transform: translateX(16px); background: var(--on-accent, #fff); }
+
+@media (prefers-reduced-motion: reduce) {
+  .switch, .switch__knob { transition: none; }
+}
+
+/* ---------- Slider ---------- */
+
+.settings__slider {
+  width: 100%;
+  max-width: 240px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ---------- Number pair ---------- */
+
+.settings__dims { display: inline-flex; align-items: center; gap: 6px; }
+.settings__times { color: var(--text-faint); font-size: var(--size-xs); }
+
+.settings__num {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 6px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.settings__numLabel {
+  font-size: var(--size-xs);
+  color: var(--text-faint);
+  font-family: var(--font-code);
+}
+.settings__num input {
+  width: 52px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--size-sm);
+  font-family: var(--font-code);
+  outline: none;
+}
+
+/* The two-column row collapses before the sheet gets uncomfortably
+   narrow — a slider squeezed into 90px is not adjustable. */
+@media (max-width: 560px) {
+  .settings__layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .settings__nav {
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .settings__row { grid-template-columns: 1fr; gap: 8px; }
+  .settings__control, .settings__stack { justify-content: flex-start; align-items: flex-start; }
+  .seg--wrap { justify-content: flex-start; }
+}
