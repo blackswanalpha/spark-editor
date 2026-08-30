@@ -19,6 +19,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ---
 
+## [0.4.0] — 2026-08-30
+
+### Added
+- **Tabbed terminal sessions** — one tab per shell, a `+` to open another, close buttons and middle-click close (`src/shell/TerminalPanel.tsx`, `src/shell/Terminal/sessions.ts`, `src/store/terminal.ts`). Sessions stay mounted while hidden because `TerminalView` kills its pty on unmount. The list transitions are pure functions shared by the docked panel (zustand) and the pop-out window (local state). `New Terminal` joins the command palette.
+- **Settings** — gear at the foot of the plugin rail, `Ctrl+,`, and the palette (`src/shell/Settings/SettingsDialog.tsx`, `src/store/settings.ts`). Appearance (theme, density, interface text scale), Editor (font size, tab size, word wrap, line numbers), Terminal (font size, line height, cursor style and blink, scroll step, default privilege, mobile preset). Persisted to `settings.json` through the Tauri store with a localStorage mirror and broadcast over the event bus so the pop-out window follows. Persisted values are validated on read, not trusted. `src/theme/density.css` carries the compact layout.
+- **Mobile view** — a toggle in the docked panel and the pop-out that pins the terminal surface to a phone viewport, dimensions only. The pop-out resizes its OS window to match; needed `core:window:allow-set-size`, since `core:window:default` grants only the read side.
+
+### Changed
+- **A terminal session keeps the cwd and privilege it spawned with.** The panel used to follow the explorer selection and respawn the shell when it moved; with several tabs there is no single directory to follow, and a shell being typed in must not relocate. The explorer now decides where the *next* terminal starts. Privilege is per session.
+- **Terminal tab names come from the cwd's last segment.** Shells title themselves `user@host: dir`, so truncation cut off the only part that distinguishes two tabs. Full path and shell title moved to the tooltip.
+- **The pop-out terminal is parented to the main window** — transient-for on Linux, owner window on Windows, child window on macOS — so it stays above the editor instead of sinking behind it. Not `alwaysOnTop`.
+- **Log levels** — Info in release, Debug in dev, with `notify`, `tao`, `wry`, `hyper` and `polling` pinned to Warn. `tauri_plugin_log::Builder::default()` was logging everything at TRACE to stdout and a 40 KB rotating file.
+- **Removed** the "System terminal" button from the terminal panel footer.
+
+### Fixed
+- **Explorer file watcher took the app down on large projects** (`src-tauri/src/watch.rs`) — `watch_path` called `RecursiveMode::Recursive` with no filter and `notify` followed symlinks, so opening a Flutter project walked `.plugin_symlinks` into the pub cache: 35,400 directories watched where 248 are useful, each logged at TRACE. The host now walks the tree itself, skipping build/dependency/VCS directories, never descending a symlink (`DirEntry::file_type` does not resolve them), capping at 4096 directories and depth 12, and registering one non-recursive watch per surviving directory. New directories are picked up from their own create events. Flushes cap at 64 changes, past which a single `bulk` marker replaces thousands of IPC messages.
+- **The settings sheet could not be moved, and laid out wrong.** It was centred with `transform: translate(-50%, -50%)`, which the entrance animation overwrites when it writes `transform` for its scale and slide; position and size are now real coordinates. Its title and description were two of three children in a grid declared for two rows, so the description absorbed the `1fr` and pushed the section list to the bottom of an empty sheet — they now share one header, which is also the drag handle.
+- **Mobile panel width depended on how many tabs were open.** `width: auto` on a fixed-position box is shrink-to-fit, so the header and tab strip set the panel's width and a few tabs stretched it back to desktop width with the phone-sized grid stranded at the left edge. The width is stated; the chrome shrinks or scrolls inside it. Default mobile width is 450.
+- **The pop-out's mobile toggle only did half its job** — its window resize was denied for want of `core:window:allow-set-size`, leaving the CSS constraint alone.
+- **Editor preference changes discarded undo history** — `CodeEditor` now reconfigures font size, tab size and the line-number gutter through CodeMirror compartments instead of rebuilding the view.
+
+---
+
 ## [0.3.3] — 2026-08-30
 
 ### Added
@@ -145,7 +168,11 @@ Initial public scaffolding. Usable in Vite (browser mock FS) and via Tauri when 
 - Session restore (`app_data_dir/recents.json`, window geometry) — host commands exist, renderer boot wiring is best-effort.
 - Single window, single user, local files only — no sync, no LSP/DAP, no collaboration (by design — see `explanation.md:7`).
 
-[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.4.0
+[0.3.3]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.3
+[0.3.2]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.2
+[0.3.1]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.1
 [0.3.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.0
 [0.2.2]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.2
 [0.2.1]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.1
