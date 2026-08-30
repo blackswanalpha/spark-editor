@@ -43,8 +43,11 @@
   align-items: center;
   gap: 8px;
   padding: 4px 8px;
-  background: var(--warning-soft, #fff3cd);
-  color: var(--warning, #856404);
+  /* --warning-soft is derived per theme in tokens.css. The old literal
+     fallback (#fff3cd) was a light cream band that stayed light in the
+     dark themes, leaving --warning text on it at about 2:1. */
+  background: var(--warning-soft);
+  color: var(--warning);
   border-bottom: 1px solid var(--border);
   font-size: var(--size-xs, 12px);
   overflow-x: auto;

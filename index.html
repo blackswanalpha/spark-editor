@@ -6,6 +6,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>sparkEditor</title>
+    <script>
+      /* Pre-paint theme stamp. ThemeProvider applies the theme in an
+         effect, which lands after the first frame — a dark/navy/red user
+         saw a light flash on every launch. Reading localStorage here is
+         synchronous and runs before the body paints. The Tauri store is
+         the source of truth but is async; ThemeProvider reconciles it. */
+      (function () {
+        try {
+          var t = localStorage.getItem("spark.theme");
+          if (["light", "dark", "navy", "amber", "red", "system"].indexOf(t) !== -1) {
+            document.documentElement.setAttribute("data-theme", t);
+          }
+        } catch (e) {
+          /* private mode — the default "system" attribute already stands */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

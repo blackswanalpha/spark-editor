@@ -65,6 +65,51 @@ pub struct Row {
     pub spans: Vec<Span>,
 }
 
+/// Mouse reporting the program running in the terminal has turned on.
+/// Mirrors `vt100::MouseProtocolMode`; the renderer only needs to know
+/// whether *any* reporting is active, but carrying the mode keeps the
+/// wire honest if click reporting is added later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MouseMode {
+    None,
+    Press,
+    PressRelease,
+    ButtonMotion,
+    AnyMotion,
+}
+
+impl From<vt100::MouseProtocolMode> for MouseMode {
+    fn from(m: vt100::MouseProtocolMode) -> Self {
+        match m {
+            vt100::MouseProtocolMode::None => Self::None,
+            vt100::MouseProtocolMode::Press => Self::Press,
+            vt100::MouseProtocolMode::PressRelease => Self::PressRelease,
+            vt100::MouseProtocolMode::ButtonMotion => Self::ButtonMotion,
+            vt100::MouseProtocolMode::AnyMotion => Self::AnyMotion,
+        }
+    }
+}
+
+/// How mouse reports must be framed. Mirrors `vt100::MouseProtocolEncoding`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MouseEncoding {
+    Default,
+    Utf8,
+    Sgr,
+}
+
+impl From<vt100::MouseProtocolEncoding> for MouseEncoding {
+    fn from(e: vt100::MouseProtocolEncoding) -> Self {
+        match e {
+            vt100::MouseProtocolEncoding::Default => Self::Default,
+            vt100::MouseProtocolEncoding::Utf8 => Self::Utf8,
+            vt100::MouseProtocolEncoding::Sgr => Self::Sgr,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Frame {
@@ -86,6 +131,18 @@ pub struct Frame {
     pub bracketed_paste: bool,
     /// How many rows the view is currently scrolled back.
     pub scrollback: usize,
+    /// Rows available above the viewport — the largest `scrollback` the
+    /// buffer can currently take. The renderer needs it to size a
+    /// scrollbar and to clamp a drag without a round trip per pixel.
+    pub scrollback_max: usize,
+    /// True while a full-screen program (an editor, a pager, a TUI) owns
+    /// the screen. The alternate grid has no scrollback by construction,
+    /// so a wheel must be handed to the program instead of moving a
+    /// viewport that cannot move.
+    pub alternate_screen: bool,
+    /// Mouse reporting the program asked for, and how to frame it.
+    pub mouse_mode: MouseMode,
+    pub mouse_encoding: MouseEncoding,
     /// Frame counter — lets the renderer drop out-of-order deliveries.
     pub seq: u64,
 }
@@ -352,7 +409,19 @@ fn row_spans(screen: &vt100::Screen, y: u16, cols: u16) -> (Vec<Span>, String) {
 }
 
 fn build_frame(session: &Session, force_full: bool) -> Result<Frame, HostError> {
-    let parser = session.parser.lock().map_err(poisoned)?;
+    let mut parser = session.parser.lock().map_err(poisoned)?;
+    // vt100 exposes the scrollback *offset* but not the buffer's length.
+    // `set_scrollback` clamps to that length and has no other effect, so
+    // asking for more than could ever exist and reading the value back is
+    // the length; restoring the previous offset leaves the screen as it was.
+    let scrollback_max = {
+        let screen = parser.screen_mut();
+        let current = screen.scrollback();
+        screen.set_scrollback(usize::MAX);
+        let max = screen.scrollback();
+        screen.set_scrollback(current);
+        max
+    };
     let screen = parser.screen();
     let (rows, cols) = screen.size();
 
@@ -387,6 +456,10 @@ fn build_frame(session: &Session, force_full: bool) -> Result<Frame, HostError> 
         application_cursor: screen.application_cursor(),
         bracketed_paste: screen.bracketed_paste(),
         scrollback: screen.scrollback(),
+        scrollback_max,
+        alternate_screen: screen.alternate_screen(),
+        mouse_mode: screen.mouse_protocol_mode().into(),
+        mouse_encoding: screen.mouse_protocol_encoding().into(),
         seq: session.seq.fetch_add(1, Ordering::SeqCst),
     })
 }
@@ -661,16 +734,40 @@ pub fn pty_spawn(
     })
 }
 
-/// Read PTY output on a dedicated thread, feed the parser, and emit at
-/// most one frame per ~8ms so a `yes`-style flood cannot drown the IPC
-/// channel or the renderer.
+const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(8);
+
+/// Read PTY output on a dedicated thread and feed the parser.
+///
+/// Painting is left to a companion thread that wakes every ~8ms and
+/// emits a frame if the parser moved. Rate limiting from inside the read
+/// loop cannot work: the loop blocks in `read`, so the last chunk of a
+/// burst — the one that arrives less than 8ms after the previous emit —
+/// would sit unpainted until the program happened to write again. That
+/// is a shell whose output stops halfway through and only completes when
+/// you press a key.
 fn spawn_reader(app: AppHandle, session: Arc<Session>, mut reader: Box<dyn Read + Send>) {
     let closed = session.closed.clone();
+    let dirty = Arc::new(AtomicBool::new(false));
+
+    {
+        let app = app.clone();
+        let session = session.clone();
+        let closed = closed.clone();
+        let dirty = dirty.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(FRAME_INTERVAL);
+            if dirty.swap(false, Ordering::SeqCst) {
+                emit_frame(&app, &session, false);
+            } else if closed.load(Ordering::SeqCst) {
+                // Nothing pending and the shell is gone: the last flush
+                // has already happened, so this thread has no more work.
+                break;
+            }
+        });
+    }
+
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
-        let mut dirty = false;
-        let mut last_emit = std::time::Instant::now();
-        const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(8);
 
         loop {
             if closed.load(Ordering::SeqCst) {
@@ -681,12 +778,7 @@ fn spawn_reader(app: AppHandle, session: Arc<Session>, mut reader: Box<dyn Read 
                 Ok(n) => {
                     if let Ok(mut parser) = session.parser.lock() {
                         parser.process(&buf[..n]);
-                        dirty = true;
-                    }
-                    if dirty && last_emit.elapsed() >= FRAME_INTERVAL {
-                        emit_frame(&app, &session, false);
-                        dirty = false;
-                        last_emit = std::time::Instant::now();
+                        dirty.store(true, Ordering::SeqCst);
                     }
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
@@ -695,7 +787,7 @@ fn spawn_reader(app: AppHandle, session: Arc<Session>, mut reader: Box<dyn Read 
         }
 
         // Flush whatever the last burst produced before announcing exit.
-        if dirty {
+        if dirty.swap(false, Ordering::SeqCst) {
             emit_frame(&app, &session, false);
         }
         closed.store(true, Ordering::SeqCst);
@@ -928,6 +1020,90 @@ mod tests {
         assert_eq!(spans[0].text, "hello");
         assert_eq!(spans[0].col, 0);
         assert!(!key.is_empty());
+    }
+
+    /// The whole scrollback path, against the same parser the host runs:
+    /// enough output to overflow the screen, then a scroll back, then a
+    /// read of what the renderer would paint.
+    #[test]
+    fn scrollback_moves_the_visible_window() {
+        let mut parser = vt100::Parser::new(5, 20, 5000);
+        for i in 0..40 {
+            parser.process(format!("line{i}\r\n").as_bytes());
+        }
+
+        let screen = parser.screen();
+        assert_eq!(screen.scrollback(), 0, "starts live");
+        let (spans, _) = row_spans(screen, 0, 20);
+        assert_eq!(spans[0].text, "line36", "bottom of the buffer: {spans:?}");
+
+        // What build_frame's probe reports as the buffer length.
+        let max = {
+            let s = parser.screen_mut();
+            let cur = s.scrollback();
+            s.set_scrollback(usize::MAX);
+            let m = s.scrollback();
+            s.set_scrollback(cur);
+            m
+        };
+        assert!(max >= 30, "scrollback should have filled up, got {max}");
+
+        // What pty_scroll does with a wheel notch.
+        parser.screen_mut().set_scrollback(3);
+        assert_eq!(parser.screen().scrollback(), 3);
+        let (spans, _) = row_spans(parser.screen(), 0, 20);
+        assert_eq!(spans[0].text, "line33", "viewport moved up by 3: {spans:?}");
+
+        // And the jump back to the bottom.
+        parser.screen_mut().set_scrollback(0);
+        let (spans, _) = row_spans(parser.screen(), 0, 20);
+        assert_eq!(spans[0].text, "line36");
+    }
+
+    /// The alternate screen keeps no scrollback, which is why a wheel has
+    /// to reach the program instead of moving a viewport. Asserting it
+    /// here pins the behaviour the renderer's wheel routing depends on.
+    #[test]
+    fn the_alternate_screen_has_no_scrollback_to_move() {
+        let mut parser = vt100::Parser::new(5, 20, 5000);
+        for i in 0..40 {
+            parser.process(format!("line{i}\r\n").as_bytes());
+        }
+        assert!(!parser.screen().alternate_screen());
+
+        // DEC 1049: what a full-screen program sends on startup.
+        parser.process(b"\x1b[?1049h");
+        assert!(parser.screen().alternate_screen());
+        for i in 0..40 {
+            parser.process(format!("tui{i}\r\n").as_bytes());
+        }
+
+        let screen = parser.screen_mut();
+        screen.set_scrollback(10);
+        assert_eq!(screen.scrollback(), 0, "no history exists to scroll into");
+
+        // Leaving it restores the shell's history untouched.
+        parser.process(b"\x1b[?1049l");
+        assert!(!parser.screen().alternate_screen());
+        parser.screen_mut().set_scrollback(3);
+        assert_eq!(parser.screen().scrollback(), 3);
+    }
+
+    #[test]
+    fn mouse_reporting_reaches_the_frame() {
+        let mut parser = vt100::Parser::new(5, 20, 100);
+        assert_eq!(MouseMode::from(parser.screen().mouse_protocol_mode()), MouseMode::None);
+
+        // DEC 1002 + 1006: button tracking with SGR encoding.
+        parser.process(b"\x1b[?1002h\x1b[?1006h");
+        assert_eq!(
+            MouseMode::from(parser.screen().mouse_protocol_mode()),
+            MouseMode::ButtonMotion
+        );
+        assert_eq!(
+            MouseEncoding::from(parser.screen().mouse_protocol_encoding()),
+            MouseEncoding::Sgr
+        );
     }
 
     /// End-to-end: spawn a real shell through the same `build_command`

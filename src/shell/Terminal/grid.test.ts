@@ -23,6 +23,10 @@ function frame(over: Partial<PtyFrame> = {}): PtyFrame {
     applicationCursor: false,
     bracketedPaste: false,
     scrollback: 0,
+    scrollbackMax: 0,
+    alternateScreen: false,
+    mouseMode: "none",
+    mouseEncoding: "default",
     seq: 1,
     ...over,
   };

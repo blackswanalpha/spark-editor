@@ -2,8 +2,20 @@
    sparkEditor · src/theme/tokens.css
    Design tokens for the renderer.
    Typography sourced from designlabs/assets/fonts/ (Inter & JetBrains Mono).
-   Themes: light (default), dark, navy. "system" follows the OS.
-   Contrast pairs target WCAG 2.2 AA.
+   Themes: light (default), dark, navy, amber, red. "system" follows
+   the OS.
+
+   Every pair the UI actually renders is held to WCAG 2.2 AA by
+   src/theme/tokens.test.ts — edit a value there and the suite tells
+   you which pair broke. Two conventions the test encodes:
+
+     · --accent is both a fill and a text colour. Contrast is
+       symmetric, so a single value has to clear 4.5:1 against the
+       surfaces AND carry --accent-fg. That is why the warm themes'
+       accents are deeper than their name suggests.
+     · --border is the decorative hairline and is exempt from 1.4.11.
+       --border-strong is the one that clears 3:1, so a control
+       boundary that carries meaning must use it.
    ============================================================ */
 
 /* ---------- Fonts (offline-first, woff2 variable subsets) ----------
@@ -94,336 +106,466 @@
 }
 
 /* ===================================================================
-   THEME 1: LIGHT  (default)
+   THEME 1 · LIGHT  (default)
+   Cool neutral paper, blue accent. Contrast audited: text ≥7:1,
+   every muted/faint/syntax tier ≥4.5:1 on the surface it sits on.
    =================================================================== */
 :root,
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --bg:           #eef0f4;
+  /* Surfaces — bg is the window ground, surface-1 the editor sheet. */
+  --bg:           #e9ecf1;
   --surface-1:    #ffffff;
-  --surface-2:    #f6f7f9;
-  --surface-3:    #eceef2;
-  --surface-4:    #e1e5ec;
-  --border:       #d5d9e0;
-  --border-strong:#b9bfc9;
+  --surface-2:    #f5f7fa;
+  --surface-3:    #e8ebf1;
+  --surface-4:    #dadfe8;
+  --border:       #ccd2dc;
+  --border-strong:#7f8794;
 
-  --text:        #24292f;
-  --text-muted:  #5a6270;
-  --text-faint:  #8b93a1;
-  --on-accent:   #ffffff;
+  /* Text — every tier clears 4.5:1 on surface-1/2/bg; --text clears 7:1. */
+  --text:         #171b21;
+  --text-muted:   #515a67;
+  --text-faint:   #616a78;
+  --on-accent:    #ffffff;
 
-  --accent:        #2f6bde;
-  --accent-hover:  #2758bb;
-  --accent-active: #1f4a9c;
-  --accent-soft:   #e3ecff;
-  --accent-fg:     #ffffff;
+  /* Accent — one value serves as fill and as text, so it clears 4.5:1
+     against surface-1..3, bg and accent-soft, and carries accent-fg. */
+  --accent:       #1f5ed0;
+  --accent-hover: #1a4fb0;
+  --accent-active:#153f8f;
+  --accent-soft:  #e4ecfc;
+  --accent-fg:    #ffffff;
 
-  --success:     #1a7f37;
-  --warning:     #9a6700;
-  --danger:      #c62828;
-  --info:        #2f6bde;
+  /* Status */
+  --success:      #146c2e;
+  --warning:      #8a5a00;
+  --danger:       #b3261e;
+  --info:         #1f5ed0;
 
-  --selection:   rgba(47, 107, 222, 0.18);
+  --selection:   rgba(31, 94, 208, 0.20);
   --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
 
   --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.08);
   --shadow-2: 0 4px 16px rgba(16, 24, 40, 0.12);
   --shadow-3: 0 12px 40px rgba(16, 24, 40, 0.18);
 
-  /* Syntax palette (scanned vs surface-1 per A11Y-003) */
-  --syn-keyword: #a626a4;
-  --syn-string:  #1a7f37;
-  --syn-number:  #b25e09;
-  --syn-comment: #8b93a1;
-  --syn-func:    #2f6bde;
-  --syn-tag:     #c62828;
-  --syn-type:    #1f4a9c;
-  --syn-regex:   #b25e09;
-  --syn-attr:    #6f4e37;
+  /* Syntax — nine roles, nine hue families, each ≥4.5:1 on surface-1/2. */
+  --syn-keyword:  #8b1a8b;
+  --syn-string:   #146c2e;
+  --syn-number:   #9a4d06;
+  --syn-comment:  #616a78;
+  --syn-func:     #1f5ed0;
+  --syn-tag:      #b3261e;
+  --syn-type:     #0e6f68;
+  --syn-regex:    #a8265c;
+  --syn-attr:     #5f4327;
+  --syn-muted:    #616a78;
 
-  /* Terminal surface — the PTY grid resolves colours host-side and
-     only asks the theme for the ground it paints on. */
-  --term-bg:        #1b1f26;
-  --term-fg:        #e6e9ee;
-  --term-cursor:    #6d9bff;
-  --term-selection: rgba(109, 155, 255, 0.30);
+  /* Terminal ground — the PTY grid resolves ANSI colours host-side and
+     only asks the theme for the surface it paints on. */
+  --term-bg:      #171b21;
+  --term-fg:      #e6e9ee;
+  --term-cursor:  #6d9bff;
+  --term-selection: rgba(109, 155, 255, 0.32);
 }
 
 /* ===================================================================
-   THEME 2: DARK
+   THEME 2 · DARK
+   Neutral slate, periwinkle accent.
    =================================================================== */
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg:           #14171c;
-  --surface-1:    #1c2027;
-  --surface-2:    #232830;
-  --surface-3:    #2d333d;
-  --surface-4:    #353c48;
-  --border:       #3a4150;
-  --border-strong:#4c5468;
+  /* Surfaces — bg is the window ground, surface-1 the editor sheet. */
+  --bg:           #101318;
+  --surface-1:    #181c23;
+  --surface-2:    #20252d;
+  --surface-3:    #2a3039;
+  --surface-4:    #353c47;
+  --border:       #39404d;
+  --border-strong:#6a7382;
 
-  --text:        #e6e9ee;
-  --text-muted:  #a2abb8;
-  --text-faint:  #6c7686;
-  --on-accent:   #0e1524;
+  /* Text — every tier clears 4.5:1 on surface-1/2/bg; --text clears 7:1. */
+  --text:         #e8ebf0;
+  --text-muted:   #aab3c0;
+  --text-faint:   #8b95a3;
+  --on-accent:    #08101f;
 
-  --accent:        #6d9bff;
-  --accent-hover:  #89adff;
-  --accent-active: #a8c2ff;
-  --accent-soft:   #263450;
-  --accent-fg:     #0e1524;
+  /* Accent — one value serves as fill and as text, so it clears 4.5:1
+     against surface-1..3, bg and accent-soft, and carries accent-fg. */
+  --accent:       #7aa5ff;
+  --accent-hover: #96b8ff;
+  --accent-active:#b3cbff;
+  --accent-soft:  #1e2c47;
+  --accent-fg:    #08101f;
 
-  --success:     #57ab5a;
-  --warning:     #d9a53f;
-  --danger:      #f47067;
-  --info:        #6d9bff;
+  /* Status */
+  --success:      #5fc36a;
+  --warning:      #e0ad4a;
+  --danger:       #ff8b82;
+  --info:         #7aa5ff;
 
-  --selection:   rgba(109, 155, 255, 0.28);
+  --selection:   rgba(122, 165, 255, 0.28);
   --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
 
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.50);
   --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.45);
   --shadow-3: 0 12px 40px rgba(0, 0, 0, 0.55);
 
-  --syn-keyword: #d2a8ff;
-  --syn-string:  #7ee787;
-  --syn-number:  #ffb86b;
-  --syn-comment: #6c7686;
-  --syn-func:    #79c0ff;
-  --syn-tag:     #ff7b72;
-  --syn-type:    #ffa657;
-  --syn-regex:   #f97583;
-  --syn-attr:    #b392f0;
+  /* Syntax — nine roles, nine hue families, each ≥4.5:1 on surface-1/2. */
+  --syn-keyword:  #d8b4fe;
+  --syn-string:   #86e08e;
+  --syn-number:   #ffc078;
+  --syn-comment:  #8b95a3;
+  --syn-func:     #83c3ff;
+  --syn-tag:      #ff8f86;
+  --syn-type:     #6fdcc8;
+  --syn-regex:    #ff9ec4;
+  --syn-attr:     #cfd67a;
+  --syn-muted:    #8b95a3;
 
-  /* Terminal surface — the PTY grid resolves colours host-side and
-     only asks the theme for the ground it paints on. */
-  --term-bg:        #14171c;
-  --term-fg:        #e6e9ee;
-  --term-cursor:    #6d9bff;
-  --term-selection: rgba(109, 155, 255, 0.30);
+  /* Terminal ground — the PTY grid resolves ANSI colours host-side and
+     only asks the theme for the surface it paints on. */
+  --term-bg:      #101318;
+  --term-fg:      #e8ebf0;
+  --term-cursor:  #7aa5ff;
+  --term-selection: rgba(122, 165, 255, 0.32);
 }
 
 /* ===================================================================
-   THEME 3: NAVY BLUE
-   A third personality: deep ocean blues with cyan accents.
-   "system" falls back to this only if a saved preference is "navy".
+   THEME 3 · NAVY
+   Deep ocean blue, cyan accent. Never collapses to light/dark.
    =================================================================== */
 :root[data-theme="navy"] {
   color-scheme: dark;
 
-  --bg:           #0a1628;
-  --surface-1:    #0f1d33;
-  --surface-2:    #152544;
-  --surface-3:    #1c2f55;
-  --surface-4:    #243a68;
-  --border:       #2a4070;
-  --border-strong:#3a5290;
+  /* Surfaces — bg is the window ground, surface-1 the editor sheet. */
+  --bg:           #081426;
+  --surface-1:    #0e1c30;
+  --surface-2:    #142440;
+  --surface-3:    #1c2e50;
+  --surface-4:    #263a63;
+  --border:       #2b4270;
+  --border-strong:#5c7099;
 
-  --text:        #eaf2ff;
-  --text-muted:  #9fb4d6;
-  --text-faint:  #6c84a8;
-  --on-accent:   #021024;
+  /* Text — every tier clears 4.5:1 on surface-1/2/bg; --text clears 7:1. */
+  --text:         #e9f1ff;
+  --text-muted:   #a6bad9;
+  --text-faint:   #8ba2c4;
+  --on-accent:    #00131c;
 
-  --accent:        #4dd0e1;
-  --accent-hover:  #6ee0ef;
-  --accent-active: #26c6da;
-  --accent-soft:   #0a3a4a;
-  --accent-fg:     #021024;
+  /* Accent — one value serves as fill and as text, so it clears 4.5:1
+     against surface-1..3, bg and accent-soft, and carries accent-fg. */
+  --accent:       #5cd6e8;
+  --accent-hover: #7ee4f2;
+  --accent-active:#9beef8;
+  --accent-soft:  #0d3444;
+  --accent-fg:    #00131c;
 
-  --success:     #4ade80;
-  --warning:     #fbbf24;
-  --danger:      #f87171;
-  --info:        #4dd0e1;
+  /* Status */
+  --success:      #5ae08b;
+  --warning:      #f2c14e;
+  --danger:       #ff8b85;
+  --info:         #5cd6e8;
 
-  --selection:   rgba(77, 208, 225, 0.25);
+  --selection:   rgba(92, 214, 232, 0.26);
   --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
 
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.6);
-  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.55);
-  --shadow-3: 0 12px 40px rgba(0, 0, 0, 0.7);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.55);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.50);
+  --shadow-3: 0 12px 40px rgba(0, 0, 0, 0.62);
 
-  --syn-keyword: #c792ea;
-  --syn-string:  #c3e88d;
-  --syn-number:  #f78c6c;
-  --syn-comment: #6c84a8;
-  --syn-func:    #82aaff;
-  --syn-tag:     #ff5370;
-  --syn-type:    #ffcb6b;
-  --syn-regex:   #f78c6c;
-  --syn-attr:    #c792ea;
+  /* Syntax — nine roles, nine hue families, each ≥4.5:1 on surface-1/2. */
+  --syn-keyword:  #cf9bf0;
+  --syn-string:   #c6ec92;
+  --syn-number:   #fa9a74;
+  --syn-comment:  #8ba2c4;
+  --syn-func:     #8bb4ff;
+  --syn-tag:      #ff7089;
+  --syn-type:     #5cd6e8;
+  --syn-regex:    #ffa8d0;
+  --syn-attr:     #ffd06e;
+  --syn-muted:    #8ba2c4;
 
-  /* Terminal surface — the PTY grid resolves colours host-side and
-     only asks the theme for the ground it paints on. */
-  --term-bg:        #0a1628;
-  --term-fg:        #eaf2ff;
-  --term-cursor:    #4dd0e1;
-  --term-selection: rgba(77, 208, 225, 0.30);
+  /* Terminal ground — the PTY grid resolves ANSI colours host-side and
+     only asks the theme for the surface it paints on. */
+  --term-bg:      #081426;
+  --term-fg:      #e9f1ff;
+  --term-cursor:  #5cd6e8;
+  --term-selection: rgba(92, 214, 232, 0.32);
 }
 
 /* ===================================================================
-    THEME 4: AMBER / YELLOW
-    Warm amber light theme — test OTA. High contrast warm neutrals
-    with amber accent. Selectable via TitleBar theme menu.
-    =================================================================== */
+   THEME 4 · AMBER
+   Warm parchment, bronze accent. The accent is deep enough to carry
+   white text at 4.5:1 — the old #d97706 could not (3.19:1). Status
+   colours deliberately leave the amber family so a warning is not
+   mistaken for a link.
+   =================================================================== */
 :root[data-theme="amber"] {
   color-scheme: light;
 
-  --bg:           #fffbeb;
-  --surface-1:    #ffffff;
-  --surface-2:    #fef3c7;
-  --surface-3:    #fde68a;
-  --surface-4:    #fcd34d;
-  --border:       #fbbf24;
-  --border-strong:#f59e0b;
+  /* Surfaces — bg is the window ground, surface-1 the editor sheet. */
+  --bg:           #faf4e6;
+  --surface-1:    #fffdf7;
+  --surface-2:    #f5eeda;
+  --surface-3:    #ece2c8;
+  --surface-4:    #ded2b2;
+  --border:       #d5c6a3;
+  --border-strong:#95835c;
 
-  --text:        #451a03;
-  --text-muted:  #92400e;
-  --text-faint:  #b45309;
-  --on-accent:   #ffffff;
+  /* Text — every tier clears 4.5:1 on surface-1/2/bg; --text clears 7:1. */
+  --text:         #241a08;
+  --text-muted:   #5c4a28;
+  --text-faint:   #71603c;
+  --on-accent:    #fffdf7;
 
-  --accent:        #d97706;
-  --accent-hover:  #b45309;
-  --accent-active: #92400e;
-  --accent-soft:   #fef3c7;
-  --accent-fg:     #ffffff;
+  /* Accent — one value serves as fill and as text, so it clears 4.5:1
+     against surface-1..3, bg and accent-soft, and carries accent-fg. */
+  --accent:       #a04a12;
+  --accent-hover: #853c0d;
+  --accent-active:#6b300a;
+  --accent-soft:  #f7e9cd;
+  --accent-fg:    #fffdf7;
 
-  --success:     #1a7f37;
-  --warning:     #d97706;
-  --danger:      #c62828;
-  --info:        #d97706;
+  /* Status */
+  --success:      #146c2e;
+  --warning:      #7a6000;
+  --danger:       #b3261e;
+  --info:         #1f5ed0;
 
-  --selection:   rgba(217, 119, 6, 0.22);
+  --selection:   rgba(160, 74, 18, 0.20);
   --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
 
-  --shadow-1: 0 1px 2px rgba(146, 64, 14, 0.08);
-  --shadow-2: 0 4px 16px rgba(146, 64, 14, 0.12);
-  --shadow-3: 0 12px 40px rgba(146, 64, 14, 0.18);
+  --shadow-1: 0 1px 2px rgba(69, 40, 6, 0.10);
+  --shadow-2: 0 4px 16px rgba(69, 40, 6, 0.14);
+  --shadow-3: 0 12px 40px rgba(69, 40, 6, 0.20);
 
-  --syn-keyword: #be185d;
-  --syn-string:  #1a7f37;
-  --syn-number:  #b45309;
-  --syn-comment: #92400e;
-  --syn-func:    #d97706;
-  --syn-tag:     #c62828;
-  --syn-type:    #92400e;
-  --syn-regex:   #b45309;
-  --syn-attr:    #78350f;
+  /* Syntax — nine roles, nine hue families, each ≥4.5:1 on surface-1/2. */
+  --syn-keyword:  #a01a63;
+  --syn-string:   #146c2e;
+  --syn-number:   #9a4d06;
+  --syn-comment:  #71603c;
+  --syn-func:     #1f5ed0;
+  --syn-tag:      #b3261e;
+  --syn-type:     #0e6f68;
+  --syn-regex:    #7a3d9e;
+  --syn-attr:     #5f4327;
+  --syn-muted:    #71603c;
 
-  /* Terminal surface — the PTY grid resolves colours host-side and
-     only asks the theme for the ground it paints on. */
-  --term-bg:        #2a1d05;
-  --term-fg:        #fff7e6;
-  --term-cursor:    #d97706;
-  --term-selection: rgba(217, 119, 6, 0.30);
+  /* Terminal ground — the PTY grid resolves ANSI colours host-side and
+     only asks the theme for the surface it paints on. */
+  --term-bg:      #241a08;
+  --term-fg:      #faf4e6;
+  --term-cursor:  #c25a12;
+  --term-selection: rgba(194, 90, 18, 0.34);
 }
 
 /* ===================================================================
-    THEME 5: RED / CRIMSON
-    Dark crimson theme — deep maroon surfaces with a red accent.
-    Selectable via TitleBar theme menu + welcome wizard.
-    =================================================================== */
+   THEME 5 · CRIMSON
+   Dark maroon, coral accent.
+   =================================================================== */
 :root[data-theme="red"] {
   color-scheme: dark;
 
-  --bg:           #1c0a0e;
-  --surface-1:    #260f13;
-  --surface-2:    #33141a;
-  --surface-3:    #441a22;
-  --surface-4:    #57202b;
-  --border:       #6b2733;
-  --border-strong:#8a3342;
+  /* Surfaces — bg is the window ground, surface-1 the editor sheet. */
+  --bg:           #180a0d;
+  --surface-1:    #221014;
+  --surface-2:    #2e161c;
+  --surface-3:    #3d1d25;
+  --surface-4:    #4e2530;
+  --border:       #5e2c38;
+  --border-strong:#96606c;
 
-  --text:        #ffe9ec;
-  --text-muted:  #d9a3ab;
-  --text-faint:  #a9737c;
-  --on-accent:   #2a0508;
+  /* Text — every tier clears 4.5:1 on surface-1/2/bg; --text clears 7:1. */
+  --text:         #ffe9ec;
+  --text-muted:   #dba9b1;
+  --text-faint:   #bd8b94;
+  --on-accent:    #22060a;
 
-  --accent:        #ef5350;
-  --accent-hover:  #ff6f6c;
-  --accent-active: #e53935;
-  --accent-soft:   #4a1420;
-  --accent-fg:     #2a0508;
+  /* Accent — one value serves as fill and as text, so it clears 4.5:1
+     against surface-1..3, bg and accent-soft, and carries accent-fg. */
+  --accent:       #ff7a76;
+  --accent-hover: #ff9995;
+  --accent-active:#ffb3b0;
+  --accent-soft:  #43141d;
+  --accent-fg:    #22060a;
 
-  --success:     #4ade80;
-  --warning:     #fbbf24;
-  --danger:      #ff8a80;
-  --info:        #ef9a9a;
+  /* Status */
+  --success:      #68d68b;
+  --warning:      #f0c05a;
+  --danger:       #ff9a92;
+  --info:         #f0a8a8;
 
-  --selection:   rgba(239, 83, 80, 0.25);
+  --selection:   rgba(255, 122, 118, 0.26);
   --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
 
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.6);
-  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.55);
-  --shadow-3: 0 12px 40px rgba(0, 0, 0, 0.7);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.55);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.50);
+  --shadow-3: 0 12px 40px rgba(0, 0, 0, 0.62);
 
-  --syn-keyword: #ff8a80;
-  --syn-string:  #a5d6a7;
-  --syn-number:  #ffcc80;
-  --syn-comment: #a9737c;
-  --syn-func:    #ef9a9a;
-  --syn-tag:     #ff5252;
-  --syn-type:    #ffe082;
-  --syn-regex:   #ffab91;
-  --syn-attr:    #f48fb1;
+  /* Syntax — nine roles, nine hue families, each ≥4.5:1 on surface-1/2. */
+  --syn-keyword:  #ffa8d8;
+  --syn-string:   #a8dfae;
+  --syn-number:   #ffb066;
+  --syn-comment:  #bd8b94;
+  --syn-func:     #b8c8f0;
+  --syn-tag:      #ff7a76;
+  --syn-type:     #8fd9d0;
+  --syn-regex:    #d5b3ff;
+  --syn-attr:     #ffe08a;
+  --syn-muted:    #bd8b94;
 
-  /* Terminal surface — the PTY grid resolves colours host-side and
-     only asks the theme for the ground it paints on. */
-  --term-bg:        #1c0a0e;
-  --term-fg:        #ffe9ec;
-  --term-cursor:    #ef5350;
-  --term-selection: rgba(239, 83, 80, 0.30);
+  /* Terminal ground — the PTY grid resolves ANSI colours host-side and
+     only asks the theme for the surface it paints on. */
+  --term-bg:      #180a0d;
+  --term-fg:      #ffe9ec;
+  --term-cursor:  #ff7a76;
+  --term-selection: rgba(255, 122, 118, 0.32);
 }
 
 /* ===================================================================
-    SYSTEM: when data-theme="system", follow OS via prefers-color-scheme.
-   Maps to the dark tokens (it would be equivalent to light too if the
-   user prefers light — see the @media blocks below).
+   Derived tints — shared by every theme. 16% is the largest mix that
+   keeps each status colour above 4.5:1 against its own tint.
+   =================================================================== */
+:root {
+  --success-soft: color-mix(in srgb, var(--success) 16%, var(--surface-1));
+  --warning-soft: color-mix(in srgb, var(--warning) 16%, var(--surface-1));
+  --danger-soft:  color-mix(in srgb, var(--danger)  16%, var(--surface-1));
+  --info-soft:    color-mix(in srgb, var(--info)    16%, var(--surface-1));
+
+  /* Modal scrim. One token so the wizard, the dialogs and the command
+     palette dim by the same amount — they used three different values,
+     one of which (a --bg mix) barely darkened the light themes. */
+  --overlay: color-mix(in srgb, #05070b 55%, transparent);
+}
+
+/* ===================================================================
+   SYSTEM — data-theme="system" follows the OS. The bare :root rule
+   above already supplies the light palette, so only the dark case
+   needs restating; the light @media block is kept explicit so the
+   preference wins over any future :root edit.
    =================================================================== */
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
     color-scheme: dark;
-    --bg: #14171c; --surface-1: #1c2027; --surface-2: #232830;
-    --surface-3: #2d333d; --surface-4: #353c48;
-    --border: #3a4150; --border-strong: #4c5468;
-    --text: #e6e9ee; --text-muted: #a2abb8; --text-faint: #6c7686; --on-accent: #0e1524;
-    --accent: #6d9bff; --accent-hover: #89adff; --accent-active: #a8c2ff;
-    --accent-soft: #263450; --accent-fg: #0e1524;
-    --success: #57ab5a; --warning: #d9a53f; --danger: #f47067; --info: #6d9bff;
-    --selection: rgba(109, 155, 255, 0.28);
-    --focus-ring: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
-    --shadow-1: 0 1px 2px rgba(0,0,0,.5);
-    --shadow-2: 0 4px 16px rgba(0,0,0,.45);
-    --shadow-3: 0 12px 40px rgba(0,0,0,.55);
-    --syn-keyword: #d2a8ff; --syn-string: #7ee787; --syn-number: #ffb86b;
-    --syn-comment: #6c7686; --syn-func: #79c0ff; --syn-tag: #ff7b72;
-    --syn-type: #ffa657; --syn-regex: #f97583; --syn-attr: #b392f0;
-    --term-bg: #14171c; --term-fg: #e6e9ee; --term-cursor: #6d9bff;
-    --term-selection: rgba(109, 155, 255, 0.30);
+
+    /* Surfaces — bg is the window ground, surface-1 the editor sheet. */
+    --bg:           #101318;
+    --surface-1:    #181c23;
+    --surface-2:    #20252d;
+    --surface-3:    #2a3039;
+    --surface-4:    #353c47;
+    --border:       #39404d;
+    --border-strong:#6a7382;
+
+    /* Text — every tier clears 4.5:1 on surface-1/2/bg; --text clears 7:1. */
+    --text:         #e8ebf0;
+    --text-muted:   #aab3c0;
+    --text-faint:   #8b95a3;
+    --on-accent:    #08101f;
+
+    /* Accent — one value serves as fill and as text, so it clears 4.5:1
+       against surface-1..3, bg and accent-soft, and carries accent-fg. */
+    --accent:       #7aa5ff;
+    --accent-hover: #96b8ff;
+    --accent-active:#b3cbff;
+    --accent-soft:  #1e2c47;
+    --accent-fg:    #08101f;
+
+    /* Status */
+    --success:      #5fc36a;
+    --warning:      #e0ad4a;
+    --danger:       #ff8b82;
+    --info:         #7aa5ff;
+
+    --selection:   rgba(122, 165, 255, 0.28);
+    --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.50);
+    --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.45);
+    --shadow-3: 0 12px 40px rgba(0, 0, 0, 0.55);
+
+    /* Syntax — nine roles, nine hue families, each ≥4.5:1 on surface-1/2. */
+    --syn-keyword:  #d8b4fe;
+    --syn-string:   #86e08e;
+    --syn-number:   #ffc078;
+    --syn-comment:  #8b95a3;
+    --syn-func:     #83c3ff;
+    --syn-tag:      #ff8f86;
+    --syn-type:     #6fdcc8;
+    --syn-regex:    #ff9ec4;
+    --syn-attr:     #cfd67a;
+    --syn-muted:    #8b95a3;
+
+    /* Terminal ground — the PTY grid resolves ANSI colours host-side and
+       only asks the theme for the surface it paints on. */
+    --term-bg:      #101318;
+    --term-fg:      #e8ebf0;
+    --term-cursor:  #7aa5ff;
+    --term-selection: rgba(122, 165, 255, 0.32);
   }
 }
 
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"] {
     color-scheme: light;
-    --bg: #eef0f4; --surface-1: #ffffff; --surface-2: #f6f7f9;
-    --surface-3: #eceef2; --surface-4: #e1e5ec;
-    --border: #d5d9e0; --border-strong: #b9bfc9;
-    --text: #24292f; --text-muted: #5a6270; --text-faint: #8b93a1; --on-accent: #ffffff;
-    --accent: #2f6bde; --accent-hover: #2758bb; --accent-active: #1f4a9c;
-    --accent-soft: #e3ecff; --accent-fg: #ffffff;
-    --success: #1a7f37; --warning: #9a6700; --danger: #c62828; --info: #2f6bde;
-    --selection: rgba(47, 107, 222, 0.18);
-    --focus-ring: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+
+    /* Surfaces — bg is the window ground, surface-1 the editor sheet. */
+    --bg:           #e9ecf1;
+    --surface-1:    #ffffff;
+    --surface-2:    #f5f7fa;
+    --surface-3:    #e8ebf1;
+    --surface-4:    #dadfe8;
+    --border:       #ccd2dc;
+    --border-strong:#7f8794;
+
+    /* Text — every tier clears 4.5:1 on surface-1/2/bg; --text clears 7:1. */
+    --text:         #171b21;
+    --text-muted:   #515a67;
+    --text-faint:   #616a78;
+    --on-accent:    #ffffff;
+
+    /* Accent — one value serves as fill and as text, so it clears 4.5:1
+       against surface-1..3, bg and accent-soft, and carries accent-fg. */
+    --accent:       #1f5ed0;
+    --accent-hover: #1a4fb0;
+    --accent-active:#153f8f;
+    --accent-soft:  #e4ecfc;
+    --accent-fg:    #ffffff;
+
+    /* Status */
+    --success:      #146c2e;
+    --warning:      #8a5a00;
+    --danger:       #b3261e;
+    --info:         #1f5ed0;
+
+    --selection:   rgba(31, 94, 208, 0.20);
+    --focus-ring:  0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+
     --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.08);
     --shadow-2: 0 4px 16px rgba(16, 24, 40, 0.12);
     --shadow-3: 0 12px 40px rgba(16, 24, 40, 0.18);
-    --syn-keyword: #a626a4; --syn-string: #1a7f37; --syn-number: #b25e09;
-    --syn-comment: #8b93a1; --syn-func: #2f6bde; --syn-tag: #c62828;
-    --syn-type: #1f4a9c; --syn-regex: #b25e09; --syn-attr: #6f4e37;
-    --term-bg: #1b1f26; --term-fg: #e6e9ee; --term-cursor: #6d9bff;
-    --term-selection: rgba(109, 155, 255, 0.30);
+
+    /* Syntax — nine roles, nine hue families, each ≥4.5:1 on surface-1/2. */
+    --syn-keyword:  #8b1a8b;
+    --syn-string:   #146c2e;
+    --syn-number:   #9a4d06;
+    --syn-comment:  #616a78;
+    --syn-func:     #1f5ed0;
+    --syn-tag:      #b3261e;
+    --syn-type:     #0e6f68;
+    --syn-regex:    #a8265c;
+    --syn-attr:     #5f4327;
+    --syn-muted:    #616a78;
+
+    /* Terminal ground — the PTY grid resolves ANSI colours host-side and
+       only asks the theme for the surface it paints on. */
+    --term-bg:      #171b21;
+    --term-fg:      #e6e9ee;
+    --term-cursor:  #6d9bff;
+    --term-selection: rgba(109, 155, 255, 0.32);
   }
 }
 

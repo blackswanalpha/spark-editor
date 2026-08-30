@@ -33,7 +33,7 @@ import "../editor.css";
 export function HtmlPreview({ docId }: { docId: string }) {
   const doc = useDocs((s) => s.docs[docId]);
   const setRaw = useDocs((s) => s.setRaw);
-  const { resolved } = useTheme();
+  const { isDark } = useTheme();
 
   const [srcDoc, setSrcDoc] = useState<string>(doc?.raw ?? "");
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -68,7 +68,7 @@ export function HtmlPreview({ docId }: { docId: string }) {
           { tag: tagExtension.keyword, color: "var(--syn-keyword)", fontWeight: "600" },
         ])),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-        themeComp.of(EditorView.theme({}, { dark: resolved !== "light" })),
+        themeComp.of(EditorView.theme({}, { dark: isDark })),
         EditorView.updateListener.of((v) => {
           if (v.docChanged) setRaw(docId, v.state.doc.toString());
         }),
@@ -83,8 +83,8 @@ export function HtmlPreview({ docId }: { docId: string }) {
   useEffect(() => {
     const v = viewRef.current;
     if (!v) return;
-    v.dispatch({ effects: themeComp.reconfigure(EditorView.theme({}, { dark: resolved !== "light" })) });
-  }, [resolved]);
+    v.dispatch({ effects: themeComp.reconfigure(EditorView.theme({}, { dark: isDark })) });
+  }, [isDark]);
 
   // Keep CM in sync when doc changes externally (e.g. file reload) but avoid loop
   useEffect(() => {
