@@ -1,16 +1,19 @@
 /* ============================================================
    sparkEditor · src/shell/PluginRail.tsx
    Hairline plugin rail pinned left-of-explorer.
-   - 44px wide, icons-only vertical strip
+   - 51px wide, icons-only vertical strip
    - Hairline right border (1px solid var(--border))
    - Extensible plugin registry (first item is terminal)
-   - Terminal opens a PiP (Document Picture-in-Picture) or fallback dialog
+   - Settings sits alone at the foot of the rail: it is not a
+     plugin, and separating it keeps the registry above honest
+     as more plugins arrive.
    ============================================================ */
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Icon } from "@ui/Icon";
 import { useTerminal } from "@store/terminal";
 import "./PluginRail.css";
 import { TerminalDialog } from "./TerminalPanel";
+import { SettingsDialog } from "./Settings/SettingsDialog";
 
 export type RailId = "terminal";
 
@@ -29,6 +32,7 @@ export function PluginRail() {
   const toggle = useTerminal((s) => s.toggle);
   const open = useTerminal((s) => s.open);
   const close = useTerminal((s) => s.close);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const active: RailId | null = isOpen ? "terminal" : null;
 
@@ -38,6 +42,14 @@ export function PluginRail() {
       return;
     }
   }, [toggle]);
+
+  /* The palette and menu reach settings through an event rather than
+     importing this component, so the dialog has one owner. */
+  useEffect(() => {
+    const onOpen = () => setSettingsOpen(true);
+    window.addEventListener("spark:settings:open", onOpen);
+    return () => window.removeEventListener("spark:settings:open", onOpen);
+  }, []);
 
   return (
     <>
@@ -57,10 +69,21 @@ export function PluginRail() {
             </button>
           ))}
           <div className="plugin-rail__spacer" aria-hidden />
+          <button
+            type="button"
+            className={`plugin-rail__btn ${settingsOpen ? "is-active" : ""}`}
+            aria-label="Settings"
+            aria-pressed={settingsOpen}
+            title="Settings"
+            onClick={() => setSettingsOpen((v) => !v)}
+          >
+            <Icon name="settings" size={18} />
+          </button>
         </div>
       </nav>
 
       <TerminalDialog open={isOpen} onOpenChange={(o) => { if (o) open(); else close(); }} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </>
   );
 }

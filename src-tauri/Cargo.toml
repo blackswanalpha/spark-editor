@@ -1,6 +1,6 @@
 [package]
 name = "spark-editor"
-version = "0.3.3"
+version = "0.4.0"
 description = "sparkEditor — markdown, rich, code in one window"
 authors = ["sparkEditor team"]
 edition = "2021"
@@ -22,6 +22,9 @@ tauri-plugin-window-state = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-process = "2"
 tauri-plugin-log = "2"
+# Named directly so the log plugin's level filters can be configured and
+# the watcher can report a truncated walk.
+log = "0.4"
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

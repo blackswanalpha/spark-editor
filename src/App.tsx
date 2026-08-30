@@ -34,6 +34,7 @@ import { ThemeProvider, useTheme } from "@theme/ThemeProvider";
 import { ToastProvider, useToast } from "@ui/Toast";
 import { useDocs } from "@store/documents";
 import { useExplorer } from "@store/explorer";
+import { hydrateSettings } from "@store/settings";
 import { readFile, recentsAdd, recentsGet, isTauri, pickMode } from "@bridge/commands";
 import { checkForUpdates, checkForUpdatesOnBoot } from "@bridge/updater";
 import { useSidebarLayout, SIDEBAR_MAX } from "@shell/useSidebarLayout";
@@ -95,6 +96,10 @@ function Shell() {
   }, []);
 
   useEffect(() => { bindPalette({ open: () => setPaletteOpen(true), close: () => setPaletteOpen(false) }); }, []);
+
+  /* Settings: read the persisted file and subscribe to changes made in
+     the pop-out terminal window. */
+  useEffect(() => hydrateSettings(), []);
 
   /* Toast bridge: registry runs outside React and dispatches events
      that we forward to the in-tree toast API. */
@@ -602,7 +607,12 @@ function TerminalStandalone() {
   const params = new URLSearchParams(window.location.search);
   const initialCwd = params.get("cwd") || "/";
   const initialPrivilege = params.get("privilege") === "root" ? "root" : "user";
+  const initialMobile = params.get("mobile") === "1";
   const [cwd, setCwd] = useState(initialCwd);
+
+  /* This window has its own store instance, so it hydrates settings for
+     itself and then follows the main window over the same broadcast. */
+  useEffect(() => hydrateSettings(), []);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -642,7 +652,11 @@ function TerminalStandalone() {
         </div>
       }
     >
-      <TerminalStandaloneInner cwd={cwd} privilege={initialPrivilege} />
+      <TerminalStandaloneInner
+        cwd={cwd}
+        privilege={initialPrivilege}
+        initialMobile={initialMobile}
+      />
     </Suspense>
   );
 }

@@ -4,7 +4,7 @@
    the title bar's MenuMirror, and keybinding dispatch.
    ============================================================ */
 import { useDocs, type DocMode } from "@store/documents";
-import { useTerminal } from "@store/terminal";
+import { useTerminal, activeSession } from "@store/terminal";
 import {
   readFile,
   recentsAdd,
@@ -68,14 +68,34 @@ export function buildCommands(): CommandSpec[] {
       run: () => { useTerminal.getState().toggle(); },
     },
     {
+      id: "view.terminalNew", title: "New Terminal", category: "View",
+      icon: "plus",
+      keywords: ["terminal", "shell", "new", "tab", "split", "add"],
+      run: () => {
+        // The panel derives the directory from the explorer, so it — not
+        // the registry — decides where a new shell starts. It opens itself
+        // when it hears this, so a closed panel is not a special case.
+        window.dispatchEvent(new CustomEvent("spark:terminal:new"));
+      },
+    },
+    {
       id: "view.terminalRoot", title: "Terminal: Toggle Root Shell", category: "View",
       icon: "alert",
       keywords: ["root", "sudo", "pkexec", "admin", "superuser", "elevate"],
       run: () => {
         const t = useTerminal.getState();
-        t.setPrivilege(t.privilege === "root" ? "user" : "root");
         t.open();
+        const s = activeSession();
+        // With no session yet the panel is about to spawn one; the
+        // Settings default decides its privilege, not this command.
+        if (s) t.setPrivilege(s.id, s.privilege === "root" ? "user" : "root");
       },
+    },
+    {
+      id: "view.settings", title: "Settings", category: "View",
+      icon: "settings", shortcut: mod(","),
+      keywords: ["settings", "preferences", "options", "theme", "font", "density"],
+      run: () => { window.dispatchEvent(new CustomEvent("spark:settings:open")); },
     },
     {
       id: "view.toggleWordWrap", title: "Toggle Word Wrap", category: "View",
