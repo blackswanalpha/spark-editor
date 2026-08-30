@@ -87,3 +87,102 @@ describe("explorer store — context menu actions", () => {
     expect(res.ok).toBe(false);
   });
 });
+
+describe("explorer store — copy/paste correctness", () => {
+  beforeEach(async () => {
+    await useExplorer.getState().setRoot("/");
+  });
+
+  it("pasting a copy into a different directory keeps the original name", async () => {
+    // Previously every copy was suffixed " copy", so pasting into an empty
+    // folder produced "notes copy.md" even with no collision.
+    const api = useExplorer.getState();
+    await api.createFolder("/docs/audits", "src");
+    await api.createFolder("/docs/audits", "dst");
+    await api.createFile("/docs/audits/src", "notes.md");
+    await api.loadChildren("/docs/audits/dst");
+
+    api.setClipboard({ op: "copy", path: "/docs/audits/src/notes.md" });
+    const res = await useExplorer.getState().pasteInto("/docs/audits/dst");
+    expect(res.ok).toBe(true);
+
+    await useExplorer.getState().loadChildren("/docs/audits/dst");
+    const names = (useExplorer.getState().children.get("/docs/audits/dst") ?? []).map((n) => n.name);
+    expect(names).toContain("notes.md");
+    expect(names).not.toContain("notes copy.md");
+  });
+
+  it("falls back to 'name copy' only on a real collision", async () => {
+    const api = useExplorer.getState();
+    await api.createFolder("/docs/audits", "coll");
+    await api.createFile("/docs/audits/coll", "dup.md");
+    await api.loadChildren("/docs/audits/coll");
+
+    api.setClipboard({ op: "copy", path: "/docs/audits/coll/dup.md" });
+    const res = await useExplorer.getState().pasteInto("/docs/audits/coll");
+    expect(res.ok).toBe(true);
+
+    await useExplorer.getState().loadChildren("/docs/audits/coll");
+    const names = (useExplorer.getState().children.get("/docs/audits/coll") ?? []).map((n) => n.name);
+    expect(names).toContain("dup.md");
+    expect(names).toContain("dup copy.md");
+  });
+
+  it("a folder copied across directories stays a folder in the cache", async () => {
+    // copyTo used to look the source up in the DESTINATION listing, find
+    // nothing, and default isDir:false — the copy rendered as a file.
+    const api = useExplorer.getState();
+    await api.createFolder("/docs/audits", "from");
+    await api.createFolder("/docs/audits", "into");
+    await api.createFolder("/docs/audits/from", "payload");
+    await api.loadChildren("/docs/audits/from");
+    await api.loadChildren("/docs/audits/into");
+
+    const res = await useExplorer
+      .getState()
+      .copyTo("/docs/audits/from/payload", "/docs/audits/into/payload");
+    expect(res.ok).toBe(true);
+
+    const entry = (useExplorer.getState().children.get("/docs/audits/into") ?? []).find(
+      (n) => n.name === "payload",
+    );
+    expect(entry).toBeDefined();
+    expect(entry!.isDir).toBe(true);
+    expect(entry!.isFile).toBe(false);
+  });
+});
+
+describe("explorer store — navigation and loading state", () => {
+  beforeEach(async () => {
+    await useExplorer.getState().setRoot("/");
+  });
+
+  it("goUp keeps a selection that is still inside the new root", async () => {
+    await useExplorer.getState().setRoot("/docs/audits");
+    useExplorer.getState().setSelected("/docs/audits");
+    await useExplorer.getState().goUp();
+    expect(useExplorer.getState().root).toBe("/docs");
+    expect(useExplorer.getState().selectedPath).toBe("/docs/audits");
+  });
+
+  it("goUp drops a selection that falls outside the new root", async () => {
+    await useExplorer.getState().setRoot("/docs/audits");
+    useExplorer.getState().setSelected("/elsewhere/file.md");
+    await useExplorer.getState().goUp();
+    expect(useExplorer.getState().selectedPath).toBeNull();
+  });
+
+  it("leaves no path stuck in the loading set after a load", async () => {
+    // A stale-generation result used to return early without clearing the
+    // flag, leaving that row spinning forever.
+    await useExplorer.getState().loadChildren("/docs/audits");
+    expect(useExplorer.getState().loading.size).toBe(0);
+  });
+
+  it("clears loading even when the root changes mid-load", async () => {
+    const pending = useExplorer.getState().loadChildren("/docs/audits");
+    await useExplorer.getState().setRoot("/docs");
+    await pending;
+    expect(useExplorer.getState().loading.has("/docs/audits")).toBe(false);
+  });
+});

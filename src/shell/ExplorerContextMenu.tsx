@@ -104,7 +104,7 @@ export function ExplorerContextMenu({
         onRequestCreate("folder", targetDir);
         return;
       case "open-in-terminal": {
-        // Route to the internal xterm (Document PiP) instead of spawning an OS terminal.
+        // Route to the in-app terminal panel instead of spawning an OS terminal.
         // Keep explorer selection in sync so TerminalPanel cwd derives correctly.
         const dir = isDir ? path : parentDir(path);
         openTerminalAt(dir);

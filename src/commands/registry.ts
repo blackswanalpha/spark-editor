@@ -4,6 +4,7 @@
    the title bar's MenuMirror, and keybinding dispatch.
    ============================================================ */
 import { useDocs, type DocMode } from "@store/documents";
+import { useTerminal } from "@store/terminal";
 import {
   readFile,
   recentsAdd,
@@ -59,6 +60,22 @@ export function buildCommands(): CommandSpec[] {
     {
       id: "view.toggleStatusBar", title: "Toggle Status Bar", category: "View",
       run: () => { window.dispatchEvent(new CustomEvent("spark:toggleStatusBar")); },
+    },
+    {
+      id: "view.toggleTerminal", title: "Toggle Terminal", category: "View",
+      icon: "terminal", shortcut: mod("`"),
+      keywords: ["terminal", "shell", "console", "bash", "pty", "root"],
+      run: () => { useTerminal.getState().toggle(); },
+    },
+    {
+      id: "view.terminalRoot", title: "Terminal: Toggle Root Shell", category: "View",
+      icon: "alert",
+      keywords: ["root", "sudo", "pkexec", "admin", "superuser", "elevate"],
+      run: () => {
+        const t = useTerminal.getState();
+        t.setPrivilege(t.privilege === "root" ? "user" : "root");
+        t.open();
+      },
     },
     {
       id: "view.toggleWordWrap", title: "Toggle Word Wrap", category: "View",

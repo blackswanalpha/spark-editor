@@ -51,10 +51,12 @@ export interface SideBarProps {
   onRequestOpenFolder?: () => void;
   onInfo?: (message: string) => void;
   onError?: (message: string, detail?: string) => void;
+  /** Hide the pane. Rendered as a header affordance next to the tabs. */
+  onCollapse?: () => void;
 }
 
 export function SideBar({
-  recents, onOpen, activePath, onRequestOpenFolder, onInfo, onError,
+  recents, onOpen, activePath, onRequestOpenFolder, onInfo, onError, onCollapse,
 }: SideBarProps) {
   const [tab, setTab] = useState<"files" | "recents">("files");
   return (
@@ -78,6 +80,17 @@ export function SideBar({
           <Icon name="refresh" size={14} />
           <span>Recents</span>
         </button>
+        {onCollapse && (
+          <button
+            type="button"
+            className="sidebar__collapse"
+            aria-label="Hide explorer"
+            title="Hide explorer (Ctrl+B)"
+            onClick={onCollapse}
+          >
+            <Icon name="sidebar-toggle" size={14} />
+          </button>
+        )}
       </div>
 
       <div className="sidebar__body">
@@ -172,16 +185,23 @@ function Explorer({
   onInfo?: (message: string) => void;
   onError?: (message: string, detail?: string) => void;
 }) {
-  const slice = useExplorer((s) => ({
-    expanded: s.expanded,
-    children: s.children,
-    loading: s.loading,
-    errors: s.errors,
-    showHidden: s.showHidden,
-    selectedPath: s.selectedPath,
-    history: s.history,
-    historyIndex: s.historyIndex,
-  }));
+  /* Selecting each field separately. Returning an object literal from a
+     zustand selector allocates a new object on every store read, so the
+     default Object.is comparison never matches and the entire tree
+     re-renders on any store write — including ones this pane ignores. */
+  const expanded = useExplorer((s) => s.expanded);
+  const children = useExplorer((s) => s.children);
+  const loading = useExplorer((s) => s.loading);
+  const errors = useExplorer((s) => s.errors);
+  const showHidden = useExplorer((s) => s.showHidden);
+  const selectedPath = useExplorer((s) => s.selectedPath);
+  const history = useExplorer((s) => s.history);
+  const historyIndex = useExplorer((s) => s.historyIndex);
+
+  const slice = useMemo<Slice>(
+    () => ({ expanded, children, loading, errors, showHidden, selectedPath, history, historyIndex }),
+    [expanded, children, loading, errors, showHidden, selectedPath, history, historyIndex],
+  );
 
   const segments = splitPath(root);
   const title = segments[segments.length - 1] || root;
@@ -635,6 +655,15 @@ function TreeLevel({
     return raw.filter((n) => slice.showHidden || !n.name.startsWith("."));
   }, [raw, slice.showHidden]);
 
+  /* Kick off the lazy read_dir from an effect, not from render. Calling it
+     during render is a side effect React is free to run twice (StrictMode)
+     or discard, and it re-fired on every re-render while the request was in
+     flight — a request storm on a slow directory. */
+  const needsLoad = expanded && !raw && !isLoading && !error;
+  useEffect(() => {
+    if (needsLoad) void useExplorer.getState().loadChildren(dirPath);
+  }, [needsLoad, dirPath]);
+
   if (!expanded) return null;
 
   if (isLoading && (!visible || visible.length === 0)) return <LoadingGroup />;
@@ -662,8 +691,7 @@ function TreeLevel({
   }
 
   if (!visible) {
-    // Trigger load if not already.
-    void useExplorer.getState().loadChildren(dirPath);
+    // The effect above requested the listing; show the loader until it lands.
     return <LoadingGroup />;
   }
 

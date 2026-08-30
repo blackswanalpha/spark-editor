@@ -29,6 +29,15 @@ thiserror = "1"
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 
+# Terminal: real PTY + in-process VT emulation. Replaces the xterm.js
+# renderer — the frontend receives a ready-to-paint cell grid.
+portable-pty = "0.9"
+vt100 = "0.16"
+
+# Explorer live-refresh: watch the open folder so the tree reflects
+# changes made outside the app.
+notify = "8"
+
 [profile.release]
 codegen-units = 1
 lto = true

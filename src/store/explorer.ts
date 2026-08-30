@@ -17,6 +17,8 @@ import {
   copyPath as bridgeCopy,
   openInTerminal as bridgeOpenInTerminal,
   revealInOS as bridgeRevealInOS,
+  watchPath as bridgeWatchPath,
+  unwatchPath as bridgeUnwatchPath,
 } from "@bridge/commands";
 import { on } from "@bridge/events";
 
@@ -101,6 +103,42 @@ interface Actions {
    previous root can detect it's stale and drop its result. */
 let _loadGen = 0;
 
+/* ---------- Module-scope: the host watcher for the current root.
+   Exactly one watch is live at a time; retargeting it is the only way
+   the tree learns about changes made outside the app. */
+let _watchId: string | null = null;
+let _watchSeq = 0;
+
+/** Point the host watcher at `root` (or stop it when null). */
+async function retargetWatch(root: string | null): Promise<void> {
+  const seq = ++_watchSeq;
+  const previous = _watchId;
+  _watchId = null;
+  if (previous) {
+    await bridgeUnwatchPath(previous).catch(() => {});
+  }
+  if (root === null) return;
+  try {
+    const id = await bridgeWatchPath(root);
+    // A newer retarget started while this one was in flight — its watch
+    // is the one that should survive, so drop ours rather than clobber it.
+    if (seq !== _watchSeq) {
+      await bridgeUnwatchPath(id).catch(() => {});
+      return;
+    }
+    _watchId = id;
+  } catch {
+    // Watching is an enhancement: without it the tree still works, it
+    // just needs a manual refresh. Never fail navigation over it.
+    _watchId = null;
+  }
+}
+
+/** Stop watching. Exposed for teardown in tests and on app shutdown. */
+export async function stopWatching(): Promise<void> {
+  await retargetWatch(null);
+}
+
 /* ---------- Helpers ---------- */
 function normalizeRoot(path: string): string {
   if (!path) return "/";
@@ -143,6 +181,24 @@ function parentOf(path: string): string | null {
   return norm.slice(0, idx) || "/";
 }
 
+/** Keep a selection only while it remains inside `root`. */
+function keepSelection(selected: string | null, root: string): string | null {
+  return selected && isUnder(selected, root) ? selected : null;
+}
+
+/** Remove `path` from the loading set without touching anything else. */
+function clearLoading(
+  get: () => State & Actions,
+  set: (p: Partial<State>) => void,
+  path: string,
+) {
+  const loading = get().loading;
+  if (!loading.has(path)) return;
+  const next = new Set(loading);
+  next.delete(path);
+  set({ loading: next });
+}
+
 /* ---------- internal: push history (truncate forward) ---------- */
 function pushHistory(get: () => State & Actions, set: (p: Partial<State>) => void, path: string) {
   const { history, historyIndex } = get();
@@ -155,25 +211,26 @@ function pushHistory(get: () => State & Actions, set: (p: Partial<State>) => voi
 }
 
 /* ---------- internal: find a non-colliding destination for paste/copy ---------- */
+/** True when `p` names an existing file or directory.
+ *  The Tauri host returns Err(NotFound) for a missing path; the browser
+ *  mock returns a stat with both flags false. Both mean "missing". */
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    const { stat } = await import("@bridge/commands");
+    const s = (await stat(p)) as { isFile?: boolean; isDir?: boolean };
+    return Boolean(s?.isFile || s?.isDir);
+  } catch {
+    return false;
+  }
+}
+
 async function nextAvailableDest(targetDir: string, name: string): Promise<string> {
-  const { stat } = await import("@bridge/commands");
   const dot = name.lastIndexOf(".");
   const stem = dot > 0 ? name.slice(0, dot) : name;
   const ext = dot > 0 ? name.slice(dot) : "";
-  // Probe each candidate. We treat a stat result with both isFile and isDir
-  // false as "missing" (the Tauri host returns Err(NotFound); the browser
-  // mock returns a zero-flag stat for unknown paths).
-  const exists = async (p: string): Promise<boolean> => {
-    try {
-      const s = await stat(p) as { isFile?: boolean; isDir?: boolean };
-      return Boolean(s?.isFile || s?.isDir);
-    } catch {
-      return false;
-    }
-  };
   for (let n = 0; n < 1000; n++) {
     const candidate = joinPath(targetDir, n === 0 ? `${stem} copy${ext}` : `${stem} copy (${n})${ext}`);
-    if (!(await exists(candidate))) return candidate;
+    if (!(await pathExists(candidate))) return candidate;
   }
   // Fallback: timestamped name.
   return joinPath(targetDir, `${stem} copy ${Date.now()}${ext}`);
@@ -207,7 +264,7 @@ export const useExplorer = create<State & Actions>((set, get) => ({
         history: [],
         historyIndex: -1,
       });
-      console.info("[explorer] setRoot", { from: get().root, to: null });
+      void retargetWatch(null);
       window.dispatchEvent(new CustomEvent("spark:explorer:root-changed", { detail: { root: null } }));
       return;
     }
@@ -223,7 +280,7 @@ export const useExplorer = create<State & Actions>((set, get) => ({
       selectedPath: null,
     });
     pushHistory(get, set as any, normalized);
-    console.info("[explorer] setRoot", { from: get().root === normalized ? normalized : "(previous)", to: normalized, isSameRoot });
+    if (!isSameRoot) void retargetWatch(normalized);
     window.dispatchEvent(new CustomEvent("spark:explorer:root-changed", { detail: { root: normalized } }));
     await get().loadChildren(normalized);
   },
@@ -251,10 +308,12 @@ export const useExplorer = create<State & Actions>((set, get) => ({
       children: keptChildren,
       loading: new Set<string>(),
       errors: new Map<string, string>(),
-      selectedPath: null,
+      // Keep the selection when it is still inside the new root — the
+      // user navigated up, they did not deselect.
+      selectedPath: keepSelection(get().selectedPath, parent),
     });
     pushHistory(get, set as any, parent);
-    console.info("[explorer] goUp", { from: current, to: parent });
+    void retargetWatch(parent);
     window.dispatchEvent(new CustomEvent("spark:explorer:root-changed", { detail: { root: parent } }));
     await get().loadChildren(parent);
   },
@@ -282,8 +341,9 @@ export const useExplorer = create<State & Actions>((set, get) => ({
       children: keptChildren,
       loading: new Set<string>(),
       errors: new Map<string, string>(),
-      selectedPath: null,
+      selectedPath: keepSelection(get().selectedPath, target),
     });
+    void retargetWatch(target);
     window.dispatchEvent(new CustomEvent("spark:explorer:root-changed", { detail: { root: target } }));
     await get().loadChildren(target);
   },
@@ -311,8 +371,9 @@ export const useExplorer = create<State & Actions>((set, get) => ({
       children: keptChildren,
       loading: new Set<string>(),
       errors: new Map<string, string>(),
-      selectedPath: null,
+      selectedPath: keepSelection(get().selectedPath, target),
     });
+    void retargetWatch(target);
     window.dispatchEvent(new CustomEvent("spark:explorer:root-changed", { detail: { root: target } }));
     await get().loadChildren(target);
   },
@@ -353,7 +414,12 @@ export const useExplorer = create<State & Actions>((set, get) => ({
     set({ loading, errors });
     try {
       const entries = await readDir(path);
-      if (myGen !== _loadGen) return;
+      if (myGen !== _loadGen) {
+        // Root changed under us — drop the result, but still clear the
+        // loading flag or this row keeps a spinner that never resolves.
+        clearLoading(get, set, path);
+        return;
+      }
       const nodes: ExplorerNode[] = (entries ?? []).map((e: any) => {
         const isDir = Boolean(e.isDir ?? e.is_dir);
         const isFileRaw = e.isFile ?? e.is_file;
@@ -371,7 +437,10 @@ export const useExplorer = create<State & Actions>((set, get) => ({
       loadingAfter.delete(path);
       set({ children, loading: loadingAfter });
     } catch (err: any) {
-      if (myGen !== _loadGen) return;
+      if (myGen !== _loadGen) {
+        clearLoading(get, set, path);
+        return;
+      }
       const loadingAfter = new Set(get().loading);
       const errorsAfter = new Map(get().errors);
       loadingAfter.delete(path);
@@ -633,7 +702,15 @@ export const useExplorer = create<State & Actions>((set, get) => ({
     const children = new Map(get().children);
     const siblings = children.get(destParent);
     if (siblings) {
-      const srcEntry = siblings.find((n) => n.path === from);
+      // Look the source up in ITS OWN parent's listing. Searching the
+      // destination's listing only works for same-directory duplicates;
+      // a cross-directory copy found nothing and defaulted to isDir:false,
+      // so copied folders showed up in the tree as files.
+      const srcIdx = Math.max(from.lastIndexOf("/"), from.lastIndexOf("\\"));
+      const srcParent = srcIdx > 0 ? from.slice(0, srcIdx) : "/";
+      const srcEntry =
+        children.get(srcParent)?.find((n) => n.path === from) ??
+        siblings.find((n) => n.path === from);
       const isDir = srcEntry?.isDir ?? false;
       const isFile = srcEntry?.isFile ?? !isDir;
       if (!siblings.some((n) => n.path === to)) {
@@ -683,7 +760,10 @@ export const useExplorer = create<State & Actions>((set, get) => ({
       res = await get().moveTo(clip.path, to);
       if (res.ok) set({ clipboard: null });
     } else {
-      const dest = await nextAvailableDest(targetDir, name);
+      // Keep the original name when the destination is free; only fall
+      // back to "name copy" on a real collision. Always suffixing meant
+      // pasting into an empty folder produced "README copy.md".
+      const dest = (await pathExists(to)) ? await nextAvailableDest(targetDir, name) : to;
       res = await get().copyTo(clip.path, dest);
     }
     return res;
@@ -723,25 +803,35 @@ export const useExplorer = create<State & Actions>((set, get) => ({
       // Find the closest known ancestor of evt.path (or evt.from for renames)
       // that exists in our children cache, and refresh it.
       const candidate = evt.kind === "renamed" ? (evt.from ?? evt.path) : evt.path;
-      const ancestors: string[] = [];
+
+      // Walk up one level at a time to the nearest cached directory. The
+      // previous version computed the separator index once, before the
+      // loop, and then reused it as a slice length against a string that
+      // kept shrinking — so it skipped levels and often refreshed the
+      // wrong directory (or none).
+      const targets = new Set<string>();
       let cursor = candidate;
-      // Walk up until we hit root or run out.
-      const sepIdx = Math.max(cursor.lastIndexOf("/"), cursor.lastIndexOf("\\"));
-      while (sepIdx > 0) {
-        cursor = cursor.slice(0, sepIdx);
+      for (let depth = 0; depth < 64; depth++) {
+        const sep = Math.max(cursor.lastIndexOf("/"), cursor.lastIndexOf("\\"));
+        if (sep <= 0) break;
+        cursor = cursor.slice(0, sep) || "/";
         if (state.children.has(cursor) || cursor === root) {
-          ancestors.push(cursor);
+          targets.add(cursor);
           break;
         }
-        const next = Math.max(cursor.lastIndexOf("/"), cursor.lastIndexOf("\\"));
-        if (next <= 0) break;
-        cursor = cursor.slice(0, next);
+        if (cursor === "/") break;
       }
-      // Walk up: if none cached yet, but the event is directly under root, refresh root.
-      if (ancestors.length === 0 && isUnder(candidate, root)) {
-        ancestors.push(root);
+
+      // A rename moves an entry between two directories; both listings are
+      // now stale, so refresh the destination's parent as well.
+      if (evt.kind === "renamed" && evt.from && evt.path !== evt.from) {
+        const sep = Math.max(evt.path.lastIndexOf("/"), evt.path.lastIndexOf("\\"));
+        const destParent = sep > 0 ? evt.path.slice(0, sep) : "/";
+        if (state.children.has(destParent)) targets.add(destParent);
       }
-      for (const a of ancestors) {
+
+      if (targets.size === 0 && isUnder(candidate, root)) targets.add(root);
+      for (const a of targets) {
         void state.loadChildren(a);
       }
     });

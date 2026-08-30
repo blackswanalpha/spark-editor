@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "@motion/index";
 import { splashVariants, splashLogoVariants } from "@motion/index";
 import { ProgressBar } from "@ui/Loader";
-import { APP_VERSION } from "@version";
+import { useAppVersion } from "@version";
 import "./SplashScreen.css";
 
 export interface SplashScreenProps {
@@ -41,6 +41,7 @@ const STAGES = [
 ] as const;
 
 export function SplashScreen({ show, ready, minDuration = 1100, onDone }: SplashScreenProps) {
+  const version = useAppVersion();
   const [stage, setStage] = useState(0);
   const [progress, setProgress] = useState(0);
   const [timerDone, setTimerDone] = useState(false);
@@ -110,7 +111,7 @@ export function SplashScreen({ show, ready, minDuration = 1100, onDone }: Splash
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
           >
-            v{APP_VERSION} · {STAGES[stage]}
+            v{version} · {STAGES[stage]}
           </motion.div>
         </motion.div>
       )}
