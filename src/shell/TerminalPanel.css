@@ -100,7 +100,7 @@
 }
 
 .term__badge--root {
-  color: var(--on-accent, #fff);
+  color: var(--on-accent);
   background: var(--danger);
   border-color: var(--danger);
 }
@@ -127,7 +127,7 @@
 .term__btn.is-on {
   background: var(--danger);
   border-color: var(--danger);
-  color: var(--on-accent, #fff);
+  color: var(--on-accent);
 }
 
 .term__btn--sm { height: 22px; font-size: 11px; padding: 0 8px; }

@@ -20,6 +20,11 @@ import { isTauri } from "@bridge/commands";
 
 export type PtyPrivilege = "user" | "root";
 
+/** Mouse reporting the running program asked for. */
+export type PtyMouseMode = "none" | "press" | "pressRelease" | "buttonMotion" | "anyMotion";
+/** How a mouse report must be framed. */
+export type PtyMouseEncoding = "default" | "utf8" | "sgr";
+
 export interface PtySpan {
   /** Column this run starts at (0-based). */
   col: number;
@@ -51,7 +56,14 @@ export interface PtyFrame {
   title?: string;
   applicationCursor: boolean;
   bracketedPaste: boolean;
+  /** Rows the viewport is currently scrolled back by. */
   scrollback: number;
+  /** Largest `scrollback` the buffer can take — 0 means no history yet. */
+  scrollbackMax: number;
+  /** True while a full-screen program owns the screen (no scrollback exists). */
+  alternateScreen: boolean;
+  mouseMode: PtyMouseMode;
+  mouseEncoding: PtyMouseEncoding;
   seq: number;
 }
 
@@ -116,9 +128,13 @@ export const ptyList = () => host<PtySessionInfo[]>("pty_list");
 export const ptyRootSupport = () => host<RootSupport>("pty_root_support");
 export const ptyDefaultShell = () => host<string>("pty_default_shell");
 
-/** Scroll the viewport into scrollback. Positive `delta` = older output. */
+/**
+ * Scroll the viewport into scrollback. Positive `delta` = older output.
+ * Pass `absolute` to jump to a fixed offset (0 = the live bottom); the
+ * host clamps both forms and returns the offset it settled on.
+ */
 export const ptyScroll = (id: string, delta: number, absolute?: number) =>
-  host<number>("pty_scroll", { id, delta, absolute });
+  host<number>("pty_scroll", { id, delta: Math.trunc(delta), absolute });
 
 /* ---------- Events ---------- */
 
@@ -267,6 +283,48 @@ export function encodeKey(e: KeyboardEvent, ctx: KeyContext): string | null {
   if (key.length === 1) return key;
 
   return null;
+}
+
+/** Arrow-key bytes, for translating a wheel where there is no scrollback. */
+export function encodeArrow(dir: "up" | "down", applicationCursor: boolean): string {
+  const final = dir === "up" ? "A" : "B";
+  return applicationCursor ? `${SS3}${final}` : `${CSI}${final}`;
+}
+
+export interface WheelReport {
+  up: boolean;
+  /** 0-based cell under the pointer. */
+  col: number;
+  row: number;
+  shift: boolean;
+  alt: boolean;
+  ctrl: boolean;
+}
+
+/**
+ * Encode a wheel notch as an xterm mouse report.
+ *
+ * Wheel buttons are 64 (up) and 65 (down) with the usual modifier bits.
+ * A program that turned mouse reporting on scrolls itself from these —
+ * which is the only way to scroll inside a full-screen TUI, since the
+ * alternate screen keeps no scrollback for the terminal to move through.
+ */
+export function encodeWheelMouse(e: WheelReport, encoding: PtyMouseEncoding): string {
+  const button = (e.up ? 64 : 65) + (e.shift ? 4 : 0) + (e.alt ? 8 : 0) + (e.ctrl ? 16 : 0);
+  const col = Math.max(0, e.col) + 1;
+  const row = Math.max(0, e.row) + 1;
+
+  if (encoding === "sgr") return `${CSI}<${button};${col};${row}M`;
+
+  // The legacy encodings offset every field by 32. X10 puts each field in
+  // one raw byte, but this report crosses the IPC boundary as a UTF-8
+  // string, so anything past 127 would arrive as two bytes and desync the
+  // program's mouse parser. Clamping the column keeps the report six
+  // bytes wide and well formed; the UTF-8 encoding has no such limit, and
+  // any program that cares about exact coordinates asks for SGR.
+  const cap = encoding === "utf8" ? 2015 : 95;
+  const cell = (v: number) => String.fromCharCode(32 + Math.min(v, cap));
+  return `${CSI}M${String.fromCharCode(32 + button)}${cell(col)}${cell(row)}`;
 }
 
 /** Wrap pasted text for bracketed-paste-aware programs (vim, fish, zsh). */

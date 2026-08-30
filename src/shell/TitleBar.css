@@ -88,17 +88,24 @@
   box-sizing: border-box;
 }
 
-.titlebar__swatch--light  { background: #2f6bde; } /* blue */
-.titlebar__swatch--dark   { background: #f5c518; } /* yellow */
-.titlebar__swatch--navy   { background: #000000; } /* black */
-.titlebar__swatch--amber  { background: #f59e0b; } /* amber */
-.titlebar__swatch--red    { background: #ef5350; } /* red */
-.titlebar__swatch--system {
-  background: linear-gradient(135deg, #2f6bde 50%, #e53935 50%); /* blue + red */
-}
+/* Each chip is the theme's own surface with its own accent across the
+   corner, so the grid previews the palettes rather than an arbitrary
+   colour code. The previous chips were unrelated to the themes —
+   "light" was blue, "dark" was yellow, "navy" was black. */
+.titlebar__swatch--light  { background: linear-gradient(135deg, #ffffff 55%, #1f5ed0 55%); }
+.titlebar__swatch--dark   { background: linear-gradient(135deg, #181c23 55%, #7aa5ff 55%); }
+.titlebar__swatch--navy   { background: linear-gradient(135deg, #0e1c30 55%, #5cd6e8 55%); }
+.titlebar__swatch--amber  { background: linear-gradient(135deg, #f5eeda 55%, #a04a12 55%); }
+.titlebar__swatch--red    { background: linear-gradient(135deg, #221014 55%, #ff7a76 55%); }
+/* System is the light and dark grounds split down the diagonal. */
+.titlebar__swatch--system { background: linear-gradient(135deg, #ffffff 50%, #181c23 50%); }
 
+/* The ring sits inside the chip so it reads against the chip's own
+   colour rather than against the swatch grid's 2px gap. */
 .titlebar__swatch--active {
-  box-shadow: 0 0 0 1.5px var(--accent);
+  box-shadow:
+    inset 0 0 0 1px var(--surface-2),
+    inset 0 0 0 2.5px var(--accent);
   border-radius: 1px;
 }
 

@@ -28,7 +28,7 @@ export function MarkdownEditor({ docId }: { docId: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [preview, setPreview] = useState(true);
-  const { resolved } = useTheme();
+  const { isDark } = useTheme();
   const themeComp = useRef(new Compartment()).current;
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export function MarkdownEditor({ docId }: { docId: string }) {
           { tag: tagExtension.meta, color: "var(--syn-comment)" },
         ])),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-        themeComp.of(EditorView.theme({}, { dark: resolved !== "light" })),
+        themeComp.of(EditorView.theme({}, { dark: isDark })),
         EditorView.updateListener.of((v) => {
           if (v.docChanged) setRaw(docId, v.state.doc.toString());
           if (v.selectionSet || v.docChanged) {
@@ -73,8 +73,8 @@ export function MarkdownEditor({ docId }: { docId: string }) {
   useEffect(() => {
     const v = viewRef.current;
     if (!v) return;
-    v.dispatch({ effects: themeComp.reconfigure(EditorView.theme({}, { dark: resolved !== "light" })) });
-  }, [resolved]);
+    v.dispatch({ effects: themeComp.reconfigure(EditorView.theme({}, { dark: isDark })) });
+  }, [isDark]);
 
   /* Adopt store-side changes (undo/redo, Revert File). Without this the
      view kept the stale text and the next keystroke wrote it back. */

@@ -19,6 +19,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ---
 
+## [0.5.0] — 2026-08-30
+
+### Added
+- **A terminal scrollbar** (`src/shell/Terminal/scroll.ts`, `TerminalView.tsx`) — draggable, sized from a new `scrollback_max` on the frame. vt100 exposes the scrollback *offset* but not the buffer's length, so `build_frame` probes it by asking for more than could exist and reading the clamp back. Rendered as an overlay in the host's 8px padding so it steals no column, and only when there is history to reach.
+- **Keyboard viewport scrolling** — `Shift+PageUp`/`Shift+PageDown` page, `Shift+Home`/`Shift+End` jump to the ends. Bare `PageUp` still reaches the tty, because pagers and editors bind it themselves.
+- **Frames carry terminal mode** — `alternate_screen`, `mouse_mode` and `mouse_encoding` (`src-tauri/src/pty.rs`), so the renderer can tell a shell from a full-screen program and route a wheel accordingly.
+
+### Changed
+- **The terminal takes focus when its tab comes to the front, or when it is clicked.** There was no `focus()` call anywhere in `TerminalView` or `TerminalPanel`, so keystrokes went nowhere until you clicked precisely on rendered text. Visibility is detected from the host box going from zero to sized, since inactive tabs are `hidden`.
+- **Frame emission moved off the read loop** (`spawn_reader`) to a companion thread that flushes on an ~8ms interval.
+- **Theme resolution uses an explicit `isDarkTheme` set** (`src/theme/ThemeProvider.tsx`) instead of `resolved !== "light"`, which called amber dark. A pre-paint script in `index.html` stamps `data-theme` from localStorage so the first frame is correct.
+- **Scroll failures log once per session** instead of being swallowed by `.catch(() => {})`.
+
+### Fixed
+- **Scrolling did nothing inside a full-screen program.** A TUI runs in vt100's alternate screen, whose grid is constructed with zero scrollback, so `pty_scroll` was a guaranteed no-op — there was no history to move through. Real terminals hand the wheel to the program instead; Spark did neither. A wheel notch now becomes an xterm mouse report when the program turned mouse reporting on, arrow keys when the alternate screen is up without it (xterm's `alternateScroll`), or a viewport move otherwise.
+- **The wheel ignored `deltaMode`.** Every event mapped to a fixed `±scrollRows`, so a trackpad's pixel deltas each moved three rows: one flick travelled hundreds of rows and fired a full-grid repaint per event. Pixel deltas now convert through the measured cell height, sub-row remainders accumulate, and one request is in flight at a time.
+- **The host dropped the last frame of every output burst.** `spawn_reader` set `dirty` and emitted only when 8ms had elapsed, then blocked in `read()` — so the final chunk sat unpainted until the program wrote again. Output that stops halfway and completes on the next keypress.
+- **The first prompt could be lost.** Frames arriving before `ptySpawn` resolved carried an id the renderer did not know yet and were discarded; everything after is a delta against rows the host already considers painted. `ptyRefresh` after spawn closes the window.
+- **The theme provider could persist "system" over a real preference.** A window with empty localStorage — a fresh profile, cleared site data, or the pop-out terminal — wrote the store before the Tauri read of `settings.json` had resolved. Storage access is now wrapped throughout, since private mode makes it throw.
+
+---
+
 ## [0.4.0] — 2026-08-30
 
 ### Added
@@ -168,7 +190,8 @@ Initial public scaffolding. Usable in Vite (browser mock FS) and via Tauri when 
 - Session restore (`app_data_dir/recents.json`, window geometry) — host commands exist, renderer boot wiring is best-effort.
 - Single window, single user, local files only — no sync, no LSP/DAP, no collaboration (by design — see `explanation.md:7`).
 
-[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.5.0
 [0.4.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.4.0
 [0.3.3]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.3
 [0.3.2]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.2
