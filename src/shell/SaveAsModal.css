@@ -31,9 +31,9 @@
   margin: 0;
   padding: 8px 10px;
   font-size: var(--size-sm, 12px);
-  color: var(--danger, #c62828);
-  background: color-mix(in srgb, var(--danger, #c62828) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--danger, #c62828) 35%, transparent);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
   border-radius: var(--radius-sm, 5px);
   line-height: 1.4;
 }
@@ -41,11 +41,11 @@
 .saveas__hint {
   margin: 0;
   font-size: var(--size-sm, 12px);
-  color: var(--text-muted, #5a6270);
+  color: var(--text-muted);
 }
 
 .saveas__hint strong {
-  color: var(--text, #24292f);
+  color: var(--text);
   font-weight: 600;
 }
 

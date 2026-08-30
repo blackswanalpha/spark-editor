@@ -9,7 +9,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--bg) 65%, transparent);
+  background: var(--overlay);
   backdrop-filter: blur(3px);
 }
 
@@ -21,7 +21,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface-2);
-  box-shadow: 0 24px 64px color-mix(in srgb, #000 35%, transparent);
+  box-shadow: var(--shadow-3);
   overflow: hidden;
 }
 
@@ -103,18 +103,24 @@
 .wizard-theme__swatch i {
   width: 12px; height: 12px;
   border-radius: 3px;
-  border: 1px solid color-mix(in srgb, #000 15%, transparent);
+  /* The chip's own colours preview another theme, but its outline
+     belongs to the current one — a 15% black hairline vanished on the
+     dark chips and on every dark theme's card. */
+  border: 1px solid var(--border-strong);
 }
 .wizard-theme__label { font-size: var(--size-sm); font-weight: 600; }
 .wizard-theme__hint { font-size: var(--size-xs); color: var(--text-faint); }
 
 /* Theme swatch previews per theme id */
-.wizard-theme[data-theme-preview="system"] i { background: linear-gradient(135deg, #e8eaed 50%, #1c2027 50%); }
-.wizard-theme[data-theme-preview="light"]  i { background: #e8eaed; }
-.wizard-theme[data-theme-preview="dark"]   i { background: #1c2027; }
-.wizard-theme[data-theme-preview="navy"]   i { background: #14202e; }
-.wizard-theme[data-theme-preview="amber"]  i { background: #201810; }
-.wizard-theme[data-theme-preview="red"]    i { background: #2b1014; }
+/* Each preview is the theme's editor surface with its accent across the
+   corner — the same reading as the title bar chips. Amber previously
+   previewed as near-black (#201810) even though it is a light theme. */
+.wizard-theme[data-theme-preview="system"] i { background: linear-gradient(135deg, #ffffff 50%, #181c23 50%); }
+.wizard-theme[data-theme-preview="light"]  i { background: linear-gradient(135deg, #ffffff 58%, #1f5ed0 58%); }
+.wizard-theme[data-theme-preview="dark"]   i { background: linear-gradient(135deg, #181c23 58%, #7aa5ff 58%); }
+.wizard-theme[data-theme-preview="navy"]   i { background: linear-gradient(135deg, #0e1c30 58%, #5cd6e8 58%); }
+.wizard-theme[data-theme-preview="amber"]  i { background: linear-gradient(135deg, #f5eeda 58%, #a04a12 58%); }
+.wizard-theme[data-theme-preview="red"]    i { background: linear-gradient(135deg, #221014 58%, #ff7a76 58%); }
 
 .wizard__footer {
   display: flex;

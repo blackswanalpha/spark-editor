@@ -166,7 +166,7 @@ export function CodeEditor({ docId, onCursor }: Props) {
   const doc = useDocs((s) => s.docs[docId]);
   const setRaw = useDocs((s) => s.setRaw);
   const setCursor = useDocs((s) => s.setCursor);
-  const { resolved } = useTheme();
+  const { isDark } = useTheme();
 
   const fontSize = useSettings((s) => s.settings.editor.fontSize);
   const tabSize = useSettings((s) => s.settings.editor.tabSize);
@@ -254,7 +254,7 @@ export function CodeEditor({ docId, onCursor }: Props) {
           { key: "Mod-/", run: lineCommentCmd },
         ]),
         langComp.of(langFor(doc.name, doc.language, doc.raw)),
-        themeComp.of(EditorView.theme({}, { dark: resolved !== "light" })),
+        themeComp.of(EditorView.theme({}, { dark: isDark })),
         wrapComp.of(initialWrap ? EditorView.lineWrapping : []),
         EditorView.updateListener.of((v: ViewUpdate) => {
           if (v.docChanged) setRaw(docId, v.state.doc.toString());
@@ -313,9 +313,9 @@ export function CodeEditor({ docId, onCursor }: Props) {
     const v = viewRef.current;
     if (!v) return;
     v.dispatch({
-      effects: themeComp.reconfigure(EditorView.theme({}, { dark: resolved !== "light" })),
+      effects: themeComp.reconfigure(EditorView.theme({}, { dark: isDark })),
     });
-  }, [resolved]);
+  }, [isDark]);
 
   /* -- Settings swaps ---------------------------------------- */
   useEffect(() => {

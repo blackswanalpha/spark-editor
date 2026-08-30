@@ -2,14 +2,19 @@
    sparkEditor · src/lib/themeTokens.ts
    Bridge from the editor's CSS theme tokens to Shiki themes.
    Keeping these in sync with src/theme/tokens.css is the
-   design contract for the three themes.
+   design contract for the five themes. Values below are generated
+   from the same audited palette; change tokens.css first.
    ============================================================ */
 import type { ThemeRegistration } from "shiki";
+
+/** Themes whose ground is light. Kept beside isDarkTheme() in
+    ThemeProvider — both answer the same question for their own consumer. */
+const LIGHT_THEMES = new Set(["spark-light", "spark-amber"]);
 
 function buildTheme(name: string, bg: string, fg: string, c: Record<string, string>): ThemeRegistration {
   return {
     name,
-    type: name === "spark-light" || name === "spark-amber" ? "light" as const : "dark" as const,
+    type: LIGHT_THEMES.has(name) ? ("light" as const) : ("dark" as const),
     bg,
     fg,
     colors: c,
@@ -28,24 +33,24 @@ function buildTheme(name: string, bg: string, fg: string, c: Record<string, stri
 }
 
 export const themeTokens = {
-  light: buildTheme("spark-light", "#ffffff", "#24292f", {
-    comment: "#8b93a1", keyword: "#a626a4", string: "#1a7f37", number: "#b25e09",
-    func: "#2f6bde", tag: "#c62828", type: "#1f4a9c", attr: "#6f4e37", regex: "#b25e09",
+  light: buildTheme("spark-light", "#ffffff", "#171b21", {
+    comment: "#616a78", keyword: "#8b1a8b", string: "#146c2e", number: "#9a4d06",
+    func: "#1f5ed0", tag: "#b3261e", type: "#0e6f68", attr: "#5f4327", regex: "#a8265c",
   }),
-  dark: buildTheme("spark-dark", "#1c2027", "#e6e9ee", {
-    comment: "#6c7686", keyword: "#d2a8ff", string: "#7ee787", number: "#ffb86b",
-    func: "#79c0ff", tag: "#ff7b72", type: "#ffa657", attr: "#b392f0", regex: "#f97583",
+  dark: buildTheme("spark-dark", "#181c23", "#e8ebf0", {
+    comment: "#8b95a3", keyword: "#d8b4fe", string: "#86e08e", number: "#ffc078",
+    func: "#83c3ff", tag: "#ff8f86", type: "#6fdcc8", attr: "#cfd67a", regex: "#ff9ec4",
   }),
-  navy: buildTheme("spark-navy", "#0f1d33", "#eaf2ff", {
-    comment: "#6c84a8", keyword: "#c792ea", string: "#c3e88d", number: "#f78c6c",
-    func: "#82aaff", tag: "#ff5370", type: "#ffcb6b", attr: "#c792ea", regex: "#f78c6c",
+  navy: buildTheme("spark-navy", "#0e1c30", "#e9f1ff", {
+    comment: "#8ba2c4", keyword: "#cf9bf0", string: "#c6ec92", number: "#fa9a74",
+    func: "#8bb4ff", tag: "#ff7089", type: "#5cd6e8", attr: "#ffd06e", regex: "#ffa8d0",
   }),
-  amber: buildTheme("spark-amber", "#fffbeb", "#451a03", {
-    comment: "#92400e", keyword: "#be185d", string: "#1a7f37", number: "#b45309",
-    func: "#d97706", tag: "#c62828", type: "#92400e", attr: "#78350f", regex: "#b45309",
+  amber: buildTheme("spark-amber", "#fffdf7", "#241a08", {
+    comment: "#71603c", keyword: "#a01a63", string: "#146c2e", number: "#9a4d06",
+    func: "#1f5ed0", tag: "#b3261e", type: "#0e6f68", attr: "#5f4327", regex: "#7a3d9e",
   }),
-  red: buildTheme("spark-red", "#260f13", "#ffe9ec", {
-    comment: "#a9737c", keyword: "#ff8a80", string: "#a5d6a7", number: "#ffcc80",
-    func: "#ef9a9a", tag: "#ff5252", type: "#ffe082", attr: "#f48fb1", regex: "#ffab91",
+  red: buildTheme("spark-red", "#221014", "#ffe9ec", {
+    comment: "#bd8b94", keyword: "#ffa8d8", string: "#a8dfae", number: "#ffb066",
+    func: "#b8c8f0", tag: "#ff7a76", type: "#8fd9d0", attr: "#ffe08a", regex: "#d5b3ff",
   }),
 };

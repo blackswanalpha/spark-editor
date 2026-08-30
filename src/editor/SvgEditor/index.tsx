@@ -175,7 +175,7 @@ export function SvgEditor({ docId }: { docId: string }) {
   const codeRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const themeComp = useRef(new Compartment()).current;
-  const { resolved } = useTheme();
+  const { isDark } = useTheme();
 
   useEffect(() => {
     if (!showCode || !codeRef.current || !doc) return;
@@ -195,7 +195,7 @@ export function SvgEditor({ docId }: { docId: string }) {
           { tag: tagExtension.comment, color: "var(--syn-comment)", fontStyle: "italic" },
         ])),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-        themeComp.of(EditorView.theme({}, { dark: resolved !== "light" })),
+        themeComp.of(EditorView.theme({}, { dark: isDark })),
         EditorView.updateListener.of((v) => { if (v.docChanged) setRaw(docId, v.state.doc.toString()); }),
       ],
     });
@@ -203,6 +203,16 @@ export function SvgEditor({ docId }: { docId: string }) {
     viewRef.current = v;
     return () => { v.destroy(); viewRef.current = null; };
   }, [showCode, docId]);
+
+  /* -- Theme swap --------------------------------------------
+     The compartment was created with the boot value and never
+     reconfigured, so switching theme with the code pane open left
+     CodeMirror painting the previous mode's selection and gutter. */
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: themeComp.reconfigure(EditorView.theme({}, { dark: isDark })),
+    });
+  }, [isDark, themeComp]);
 
   // Canvas click to place shape
   const onCanvasClick = useCallback((e: React.MouseEvent) => {

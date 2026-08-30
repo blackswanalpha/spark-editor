@@ -200,7 +200,7 @@
 .seg__item:focus-visible { box-shadow: var(--focus-ring); outline: none; }
 .seg__item.is-active {
   background: var(--accent);
-  color: var(--on-accent, #fff);
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -231,7 +231,7 @@
   background: var(--surface-1);
   transition: transform 120ms var(--ease, ease-out);
 }
-.switch.is-on .switch__knob { transform: translateX(16px); background: var(--on-accent, #fff); }
+.switch.is-on .switch__knob { transform: translateX(16px); background: var(--on-accent); }
 
 @media (prefers-reduced-motion: reduce) {
   .switch, .switch__knob { transition: none; }
