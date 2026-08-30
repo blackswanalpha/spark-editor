@@ -19,6 +19,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ---
 
+## [0.3.3] — 2026-08-30
+
+### Added
+- **Real PTY terminal** — `src-tauri/src/pty.rs` spawns the actual login shell with `portable-pty` and runs terminal emulation host-side with the `vt100` crate; the renderer receives resolved cell grids over `pty://frame` and paints styled spans (`src/shell/Terminal/TerminalView.tsx`, `src/shell/Terminal/grid.ts`, `src/shell/Terminal/useCellMetrics.ts`, `src/bridge/pty.ts`). Real scrollback, SIGWINCH resize, bracketed paste, DECCKM arrows, control codes, 256-colour + truecolour, OSC window titles.
+- **Root shell access** — a header toggle respawns the session through `pkexec`, falling back to `sudo -i`, so the OS collects the password and no credential passes through the app. Root sessions carry a red border and badge. New commands `view.toggleTerminal` (`Ctrl+``) and `view.terminalRoot`.
+- **Explorer resize + collapse** — `src/shell/useSidebarLayout.ts` — drag handle between the pane and editor (180–640px, persisted), double-click to reset, snap-closed under 120px, keyboard control (arrows resize, Enter toggles, Home resets), `Ctrl+B` toggle, reveal button when collapsed.
+- **Filesystem watching** — `src-tauri/src/watch.rs` implements `watch_path`/`unwatch_path` with `notify`, coalescing bursts over 120ms. The client half (`watchPath`, the `file:changed` subscription) had been wired up with no host command behind it, so the tree never noticed changes made outside the app.
+- **Version-sync gate** — `scripts/check-version-sync.mjs` fails the build when `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and (on a tag) the git tag disagree. Wired into `ci.yml` and `release.yml`.
+
+### Changed
+- **xterm.js removed** — `@xterm/xterm` and `@xterm/addon-fit` are gone. The previous terminal was a simulated shell with seven hardcoded commands; there is no terminal emulator in the renderer any more.
+- `src/version.ts` — `useAppVersion()` reads the version from the running binary via `getVersion()`; `APP_VERSION` (build-time `package.json`) is now a fallback only, so a stale `dist/` cannot misreport the version.
+- `src/shell/TerminalPanel.tsx` — pop-out is a plain Tauri `WebviewWindow`; the Picture-in-Picture and `window.open` fallbacks (and their cwd-sync machinery) are gone, since the session lives host-side and needs no state handed across.
+
+### Fixed
+- **Updater: a phantom update is now impossible.** `tauri-action` writes `latest.json` from `tauri.conf.json`, not from the tag, so tagging `v0.3.3` without bumping that file ships a release *named* 0.3.3 that advertises 0.3.2 — clients update "successfully" and stay on the version they had. The version-sync gate stops that at build time; the client additionally refuses any manifest not strictly newer than the running binary; `src-tauri/src/update_env.rs` reports the install medium using `bundle_type()` (the same value `tauri-plugin-updater` keys off, so the two cannot disagree) and refuses to download when no installer can apply; and every install writes a receipt that `verifyPendingUpdate()` checks on the next boot, so a silent failure is reported instead of hidden.
+- **Ghost documents after closing a tab** — `src/store/documents.ts` — every mutator spread `s.docs[id]` unguarded, so a debounced editor callback landing after a tab close resurrected a half-built document or crashed on `s.history[id].past`. `saveDocument` also marked clean from a pre-write snapshot, dropping edits made while the write was in flight. Closing a middle tab now focuses its neighbour rather than the last tab.
+- **Explorer re-rendered on every store write** — `src/shell/SideBar.tsx` — the zustand selector returned a fresh object literal on every read, so the default `Object.is` comparison never matched.
+- **`loadChildren` was called during render** — `src/shell/SideBar.tsx` — re-firing on every re-render while the request was in flight; moved to an effect.
+- **Cross-directory folder copies rendered as files** — `src/store/explorer.ts` — `copyTo` looked the source entry up in the *destination's* listing.
+- **`file:changed` refreshed the wrong directory** — `src/store/explorer.ts` — the ancestor walk computed its separator index once outside the loop and reused it as a slice length against a shrinking string, skipping levels.
+- **Rows could spin forever** — `src/store/explorer.ts` — a stale-generation load returned early without clearing `loading`.
+- **Terminal window remounted continuously** — `src/App.tsx` — `React.lazy()` inside the component body built a new lazy type on every render.
+- **Whole document re-parsed on every keystroke** — `src/editor/CodeEditor/index.tsx` — the language compartment was keyed on `doc.raw`. Store-side changes (undo/redo, Revert File) also never reached the view; both CodeEditor and MarkdownEditor now adopt them.
+- **Toast timers leaked past unmount** — `src/ui/Toast.tsx`.
+- **`pasteInto` suffixed `" copy"` with no collision** — `src/store/explorer.ts` — the original name is kept when the destination is free.
+- **Navigation discarded still-valid selections** — `src/store/explorer.ts` — `goUp`/`goBack`/`goForward` keep a selection that remains under the new root.
+- **`develop.yml` never parsed** — `.github/workflows/develop.yml:98` had an unquoted `${{ }}` inside a YAML flow mapping, so every run of that workflow died at startup with "workflow file issue" and 0s duration, on `main` and release branches too.
+
+---
+
 ## [0.3.2] — 2026-08-29
 
 ### Added
