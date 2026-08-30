@@ -2,7 +2,7 @@
    sparkEditor · src/ui/Toast.tsx
    A tiny pub-sub toast manager with a live region for a11y.
    ============================================================ */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "@motion/index";
 import { toastVariants } from "@motion/index";
 import { Icon } from "./Icon";
@@ -30,8 +30,17 @@ let counter = 1;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<Toast[]>([]);
+  /* Auto-dismiss timers, so unmounting cannot leave them firing setState
+     on a gone component — and so dismissing a toast by hand cancels its
+     timer instead of leaving it to expire against a recycled id. */
+  const timersRef = useRef(new Map<number, number>());
 
   const remove = useCallback((id: number) => {
+    const timer = timersRef.current.get(id);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      timersRef.current.delete(id);
+    }
     setItems((xs) => xs.filter((x) => x.id !== id));
   }, []);
 
@@ -40,9 +49,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const item: Toast = { id, duration: 3200, ...t };
     setItems((xs) => [...xs, item]);
     if (item.duration && item.duration > 0) {
-      setTimeout(() => remove(id), item.duration);
+      timersRef.current.set(id, window.setTimeout(() => remove(id), item.duration));
     }
   }, [remove]);
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      for (const timer of timers.values()) window.clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
 
   const api = useMemo<ToastApi>(() => ({
     show,

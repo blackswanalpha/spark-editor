@@ -1,5 +1,10 @@
+mod pty;
+mod update_env;
+mod watch;
+
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 use thiserror::Error;
 
@@ -432,6 +437,8 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_log::Builder::default().build())
+        .manage(pty::PtyManager::default())
+        .manage(watch::WatchManager::default())
         .invoke_handler(tauri::generate_handler![
             read_file,
             read_file_base64,
@@ -449,7 +456,45 @@ pub fn run() {
             recents_get,
             recents_add,
             recents_clear,
+            pty::pty_spawn,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_refresh,
+            pty::pty_scroll,
+            pty::pty_kill,
+            pty::pty_list,
+            pty::pty_root_support,
+            pty::pty_default_shell,
+            update_env::update_environment,
+            update_env::restart_app,
+            watch::watch_path,
+            watch::unwatch_path,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .on_window_event(|window, event| {
+            // Closing the main window must not leave orphaned shells
+            // holding the app alive in the background.
+            if let tauri::WindowEvent::Destroyed = event {
+                if window.label() == "main" {
+                    let handle = window.app_handle();
+                    if let Some(manager) = handle.try_state::<pty::PtyManager>() {
+                        pty::shutdown_all(&manager);
+                    }
+                    if let Some(manager) = handle.try_state::<watch::WatchManager>() {
+                        watch::shutdown_all(&manager);
+                    }
+                }
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                if let Some(manager) = app.try_state::<pty::PtyManager>() {
+                    pty::shutdown_all(&manager);
+                }
+                if let Some(manager) = app.try_state::<watch::WatchManager>() {
+                    watch::shutdown_all(&manager);
+                }
+            }
+        });
 }

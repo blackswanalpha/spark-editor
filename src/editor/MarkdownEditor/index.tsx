@@ -76,6 +76,20 @@ export function MarkdownEditor({ docId }: { docId: string }) {
     v.dispatch({ effects: themeComp.reconfigure(EditorView.theme({}, { dark: resolved !== "light" })) });
   }, [resolved]);
 
+  /* Adopt store-side changes (undo/redo, Revert File). Without this the
+     view kept the stale text and the next keystroke wrote it back. */
+  useEffect(() => {
+    const v = viewRef.current;
+    if (!v || doc?.raw == null) return;
+    const current = v.state.doc.toString();
+    if (current === doc.raw) return;
+    const anchor = Math.min(v.state.selection.main.anchor, doc.raw.length);
+    v.dispatch({
+      changes: { from: 0, to: current.length, insert: doc.raw },
+      selection: { anchor },
+    });
+  }, [doc?.raw]);
+
   const html = useMemo(() => renderMd(doc?.raw ?? ""), [doc?.raw]);
 
   const insert = useCallback((left: string, right = "") => {

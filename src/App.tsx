@@ -11,7 +11,7 @@
    (decorations: false, titleBarStyle: "Overlay" on macOS) so
    the rendered titlebar IS the chrome.
    ============================================================ */
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "@motion/index";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { TitleBar } from "@shell/TitleBar";
@@ -36,8 +36,8 @@ import { useDocs } from "@store/documents";
 import { useExplorer } from "@store/explorer";
 import { readFile, recentsAdd, recentsGet, isTauri, pickMode } from "@bridge/commands";
 import { checkForUpdates, checkForUpdatesOnBoot } from "@bridge/updater";
-import { buildCommands, bindPalette, type CommandSpec, currentRoot, setCurrentRoot } from "@commands/registry";
-import { Button } from "@ui/Button";
+import { useSidebarLayout, SIDEBAR_MAX } from "@shell/useSidebarLayout";
+import { buildCommands, bindPalette, type CommandSpec, setCurrentRoot } from "@commands/registry";
 import { Icon } from "@ui/Icon";
 import OpenDialog from "@ui/OpenDialog";
 import SaveAsModal from "@shell/SaveAsModal";
@@ -52,7 +52,7 @@ function Shell() {
   const active = useDocs((s) => s.active);
   const setActive = useDocs((s) => s.setActive);
   const open = useDocs((s) => s.open);
-  const [showSidebar, setShowSidebar] = useState(true);
+  const sidebar = useSidebarLayout();
   const [showStatus, setShowStatus] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [recents, setRecents] = useState<{ path: string; name: string }[]>([]);
@@ -76,8 +76,23 @@ function Shell() {
 
   const pendingCloseRef = useRef<(() => void) | null>(null);
 
-  const commandsRef = useRef<CommandSpec[]>([]);
-  commandsRef.current = useMemo(() => buildCommands(), [paletteOpen]);
+  /* The command table closes over store getters, not over React state, so
+     it only needs rebuilding when the set of commands could change. Holding
+     it in state (rather than assigning a ref during render) keeps the menu
+     and palette re-rendering when it does. */
+  const [commands, setCommands] = useState<CommandSpec[]>(() => buildCommands());
+  const commandsRef = useRef<CommandSpec[]>(commands);
+  commandsRef.current = commands;
+
+  const runCommand = useCallback((id: string) => {
+    commandsRef.current.find((c) => c.id === id)?.run();
+  }, []);
+
+  useEffect(() => {
+    const rebuild = () => setCommands(buildCommands());
+    window.addEventListener("spark:commands:invalidate", rebuild);
+    return () => window.removeEventListener("spark:commands:invalidate", rebuild);
+  }, []);
 
   useEffect(() => { bindPalette({ open: () => setPaletteOpen(true), close: () => setPaletteOpen(false) }); }, []);
 
@@ -200,13 +215,15 @@ function Shell() {
     const onKey = (e: KeyboardEvent) => {
       const isMod = isMac() ? e.metaKey : e.ctrlKey;
       if (isMod && e.shiftKey && (e.key === "P" || e.key === "p")) { e.preventDefault(); setPaletteOpen(true); }
-      else if (isMod && (e.key === "s" || e.key === "S")) { e.preventDefault(); commandsRef.current.find(c => c.id === "file.save")?.run(); }
-      else if (isMod && (e.key === "n" || e.key === "N")) { e.preventDefault(); commandsRef.current.find(c => c.id === "file.new")?.run(); }
-      else if (isMod && (e.key === "w" || e.key === "W")) { e.preventDefault(); commandsRef.current.find(c => c.id === "tab.close")?.run(); }
+      else if (isMod && (e.key === "s" || e.key === "S")) { e.preventDefault(); runCommand("file.save"); }
+      else if (isMod && (e.key === "n" || e.key === "N")) { e.preventDefault(); runCommand("file.new"); }
+      else if (isMod && (e.key === "w" || e.key === "W")) { e.preventDefault(); runCommand("tab.close"); }
+      else if (isMod && (e.key === "b" || e.key === "B") && !e.shiftKey) { e.preventDefault(); sidebar.toggle(); }
+      else if (isMod && e.key === "`") { e.preventDefault(); runCommand("view.toggleTerminal"); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [runCommand, sidebar]);
 
   // Listen to "spark:command" events from menus
   useEffect(() => {
@@ -222,7 +239,7 @@ function Shell() {
 
   // Sidebar/Status bar toggles
   useEffect(() => {
-    const sb = () => setShowSidebar((v) => !v);
+    const sb = () => sidebar.toggle();
     const st = () => setShowStatus((v) => !v);
     window.addEventListener("spark:toggleSidebar", sb);
     window.addEventListener("spark:toggleStatusBar", st);
@@ -230,7 +247,7 @@ function Shell() {
       window.removeEventListener("spark:toggleSidebar", sb);
       window.removeEventListener("spark:toggleStatusBar", st);
     };
-  }, []);
+  }, [sidebar]);
 
   // Subscribe the explorer to host file:changed events once.
   useEffect(() => {
@@ -244,10 +261,20 @@ function Shell() {
 
   // OTA: silent check on boot + manual check via Help → Check for Updates
   useEffect(() => {
-    if (isTauri) checkForUpdatesOnBoot(toast);
-    const onCheck = () => { void checkForUpdates({ silent: false, onInfo: toast.info, onSuccess: toast.success, onError: toast.error }); };
+    const cancelBoot = isTauri ? checkForUpdatesOnBoot(toast) : null;
+    const onCheck = () => {
+      void checkForUpdates({
+        silent: false,
+        onInfo: toast.info,
+        onSuccess: toast.success,
+        onError: toast.error,
+      });
+    };
     window.addEventListener("spark:help:checkForUpdates", onCheck);
-    return () => window.removeEventListener("spark:help:checkForUpdates", onCheck);
+    return () => {
+      cancelBoot?.();
+      window.removeEventListener("spark:help:checkForUpdates", onCheck);
+    };
   }, [toast]);
 
   // Help → Show Welcome Screen (re-opens the first-run wizard)
@@ -302,21 +329,24 @@ function Shell() {
         platform={isTauri ? (navigator.userAgent.includes("Mac") ? "macos" : "windows") : "windows"}
       />
 
-      <MenuBar commands={commandsRef.current} hasActiveDoc={!!activeDoc} />
+      <MenuBar commands={commands} hasActiveDoc={!!activeDoc} />
 
       <div className="app__rail">
         <PluginRail />
       </div>
 
-      <AnimatePresence>
-        {showSidebar && (
+      <AnimatePresence initial={false}>
+        {!sidebar.collapsed && (
           <motion.aside
             key="sidebar"
             className="app__sidebar"
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 260, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: [0.2, 0.6, 0.3, 1] }}
+            style={{ width: sidebar.width }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            // Width is driven by the drag, so animating it here would fight
+            // the pointer. Only opacity animates.
+            transition={{ duration: sidebar.dragging ? 0 : 0.18, ease: [0.2, 0.6, 0.3, 1] }}
           >
             <SideBar
               recents={recents}
@@ -335,10 +365,45 @@ function Shell() {
               }}
               onInfo={(msg) => toast.info(msg)}
               onError={(title, detail) => toast.error(title, detail)}
+              onCollapse={() => sidebar.setCollapsed(true)}
             />
           </motion.aside>
         )}
       </AnimatePresence>
+
+      <div
+        className={`app__sidebar-resizer ${sidebar.dragging ? "is-dragging" : ""} ${
+          sidebar.collapsed ? "is-collapsed" : ""
+        }`}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize explorer"
+        aria-valuenow={sidebar.collapsed ? 0 : sidebar.width}
+        aria-valuemin={0}
+        aria-valuemax={SIDEBAR_MAX}
+        tabIndex={0}
+        onPointerDown={sidebar.startResize}
+        onKeyDown={sidebar.onHandleKeyDown}
+        onDoubleClick={sidebar.reset}
+        title={
+          sidebar.collapsed
+            ? "Drag or press Enter to show the explorer"
+            : "Drag to resize · double-click to reset · Enter to hide"
+        }
+      >
+        <span className="app__sidebar-resizer-grip" aria-hidden />
+        {sidebar.collapsed && (
+          <button
+            type="button"
+            className="app__sidebar-reveal"
+            aria-label="Show explorer"
+            title="Show explorer (Ctrl+B)"
+            onClick={() => sidebar.setCollapsed(false)}
+          >
+            <Icon name="sidebar-toggle" size={14} />
+          </button>
+        )}
+      </div>
 
       <SplashScreen ready={bootReady} />
 
@@ -375,9 +440,9 @@ function Shell() {
         ) : (
           <OnboardingScreen
             recents={recents}
-            onCreate={() => commandsRef.current.find(c => c.id === "file.new")?.run()}
-            onOpenFolder={() => commandsRef.current.find(c => c.id === "file.openFolder")?.run()}
-            onOpenFile={() => commandsRef.current.find(c => c.id === "file.open")?.run()}
+            onCreate={() => runCommand("file.new")}
+            onOpenFolder={() => runCommand("file.openFolder")}
+            onOpenFile={() => runCommand("file.open")}
             onOpenRecent={async (path) => {
               try {
                 const text = await readFile(path);
@@ -387,7 +452,7 @@ function Shell() {
                 toast.error("Open failed", e?.kind || "Unknown error");
               }
             }}
-            onPalette={() => commandsRef.current.find(c => c.id === "view.commandPalette")?.run()}
+            onPalette={() => runCommand("view.commandPalette")}
           />
         )}
       </main>
@@ -416,7 +481,7 @@ function Shell() {
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
-        commands={commandsRef.current}
+        commands={commands}
       />
       <WelcomeWizard open={welcomeOpen} onOpenChange={setWelcomeOpen} />
       <OpenDialog />
@@ -512,47 +577,73 @@ function isMac() {
   return typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 }
 
-function isTerminalWindow() {
-  try { return new URLSearchParams(window.location.search).has("terminal"); } catch { return false; }
+function isTerminalWindow(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).has("terminal");
+  } catch {
+    return false;
+  }
 }
 
+/* Declared at module scope. Calling React.lazy() inside a component body
+   builds a NEW lazy type on every render, which React treats as a
+   different component: the terminal would unmount, remount and kill its
+   shell on each parent update. */
+const TerminalStandaloneInner = lazy(() =>
+  import("@shell/TerminalPanel").then((m) => ({ default: m.TerminalStandaloneInner })),
+);
+
+/**
+ * Terminal-only window (`index.html?terminal=1`), opened as a separate
+ * OS window. The session runs in the Rust host, so the cwd is all this
+ * view needs; the main window pushes updates over the Tauri event bus.
+ */
 function TerminalStandalone() {
   const params = new URLSearchParams(window.location.search);
   const initialCwd = params.get("cwd") || "/";
-  // minimal standalone terminal window — used for Tauri pop-out OS window
-  // Reuse the same XTerm logic but without the main app chrome
-  const [cwd] = useState(initialCwd);
-  // listen for cwd updates from main window via postMessage / storage
-  const [liveCwd, setLiveCwd] = useState(cwd);
+  const initialPrivilege = params.get("privilege") === "root" ? "root" : "user";
+  const [cwd, setCwd] = useState(initialCwd);
+
   useEffect(() => {
-    const onMsg = (e: MessageEvent) => {
-      if (e.data && e.data.type === "spark:terminal:cwd" && typeof e.data.cwd === "string") setLiveCwd(e.data.cwd);
-    };
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "spark:terminal:cwd" && e.newValue) setLiveCwd(e.newValue);
-    };
-    window.addEventListener("message", onMsg);
-    window.addEventListener("storage", onStorage);
-    // also poll for Tauri event
     let unlisten: (() => void) | null = null;
-    (async () => {
+    let cancelled = false;
+
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { type?: string; cwd?: string } | null;
+      if (d?.type === "spark:terminal:cwd" && typeof d.cwd === "string") setCwd(d.cwd);
+    };
+    window.addEventListener("message", onMessage);
+
+    void (async () => {
       try {
         const { listen } = await import("@tauri-apps/api/event");
-        unlisten = await listen<string>("terminal:cwd", (ev) => { if (typeof ev.payload === "string") setLiveCwd(ev.payload); });
-      } catch {}
+        const fn = await listen<string>("terminal:cwd", (ev) => {
+          if (typeof ev.payload === "string") setCwd(ev.payload);
+        });
+        if (cancelled) fn();
+        else unlisten = fn;
+      } catch {
+        /* not running under Tauri */
+      }
     })();
+
     return () => {
-      window.removeEventListener("message", onMsg);
-      window.removeEventListener("storage", onStorage);
-      try { unlisten?.(); } catch {}
+      cancelled = true;
+      window.removeEventListener("message", onMessage);
+      unlisten?.();
     };
   }, []);
-  // lazy import the terminal UI
-  const TerminalPanelLazy = React.lazy(() => import("@shell/TerminalPanel").then(m => ({ default: m.TerminalStandaloneInner })));
+
   return (
-    <React.Suspense fallback={<div style={{padding:12,color:"#a2abb8",background:"#1c2027",height:"100vh"}}>Loading terminal…</div>}>
-      <TerminalPanelLazy cwd={liveCwd} />
-    </React.Suspense>
+    <Suspense
+      fallback={
+        <div style={{ padding: 12, color: "var(--text-muted)", background: "var(--term-bg)", height: "100vh" }}>
+          Loading terminal…
+        </div>
+      }
+    >
+      <TerminalStandaloneInner cwd={cwd} privilege={initialPrivilege} />
+    </Suspense>
   );
 }
 

@@ -11,7 +11,7 @@ import { motion, AnimatePresence, overlayBackdropVariants, modalVariants } from 
 import { useTheme, type ThemeId } from "@theme/ThemeProvider";
 import { Button } from "@ui/Button";
 import { markOnboarded } from "./firstRun";
-import { APP_VERSION } from "@version";
+import { useAppVersion } from "@version";
 import "./WelcomeWizard.css";
 
 const STEP_TITLES = ["Welcome to sparkEditor", "Pick a theme", "You're all set"] as const;
@@ -31,6 +31,7 @@ export interface WelcomeWizardProps {
 }
 
 export function WelcomeWizard({ open, onOpenChange }: WelcomeWizardProps) {
+  const version = useAppVersion();
   const [step, setStep] = useState(0);
   const { theme, setTheme } = useTheme();
   const primaryRef = useRef<HTMLButtonElement>(null);
@@ -108,7 +109,7 @@ export function WelcomeWizard({ open, onOpenChange }: WelcomeWizardProps) {
                   <li><strong>File as truth</strong> — everything round-trips through plain files.</li>
                   <li><strong>Native host</strong> — dialogs, file watching and recents run on the host.</li>
                 </ul>
-                <div className="wizard__meta">v{APP_VERSION}</div>
+                <div className="wizard__meta">v{version}</div>
               </div>
             )}
 

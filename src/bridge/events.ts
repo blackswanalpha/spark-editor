@@ -21,17 +21,18 @@ export async function on<T>(event: string, handler: (payload: T) => void): Promi
  * A filesystem change notification. The host emits `file:changed` whenever
  * a watched path (or anything underneath it) changes on disk.
  *
- *  - `path`     : the affected absolute path
- *  - `kind`     : the kind of change that occurred
- *  - `mtime`    : the path's new modification time, if known
- *  - `fromPath` : the previous path when `kind === "renamed"`, otherwise
- *                 omitted
+ *  - `path` : the affected absolute path
+ *  - `kind` : the kind of change that occurred
+ *  - `from` : the previous path when `kind === "renamed"`, otherwise
+ *             omitted
+ *
+ * Field names mirror `FileChange` in src-tauri/src/watch.rs — they are
+ * the wire format, not a local convenience shape.
  */
 export interface FileChangeEvent {
   path: string;
   kind: "modified" | "created" | "removed" | "renamed";
-  mtime?: string;
-  fromPath?: string;
+  from?: string;
 }
 
 /**

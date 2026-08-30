@@ -26,6 +26,24 @@
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 }
+/* Pushed to the trailing edge of the tab strip. */
+.sidebar__collapse {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.sidebar__collapse:hover { background: var(--surface-3); color: var(--text); }
+.sidebar__collapse:focus-visible { box-shadow: var(--focus-ring); }
+
 .sidebar__tab {
   display: inline-flex; align-items: center; gap: 6px;
   height: 24px;
