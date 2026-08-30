@@ -436,7 +436,28 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_log::Builder::default().build())
+        // Trace is far too loud for a shipped app: notify alone logs a
+        // line per inotify registration, which on a large project means
+        // tens of thousands of lines written to stdout and to a 40 KB
+        // rotating file before the window is even usable. Debug builds
+        // keep app-level detail; the noisy dependencies are capped in
+        // both.
+        .plugin(
+            tauri_plugin_log::Builder::default()
+                .level(if cfg!(debug_assertions) {
+                    log::LevelFilter::Debug
+                } else {
+                    log::LevelFilter::Info
+                })
+                .level_for("notify", log::LevelFilter::Warn)
+                .level_for("notify_types", log::LevelFilter::Warn)
+                .level_for("notify::inotify", log::LevelFilter::Warn)
+                .level_for("tao", log::LevelFilter::Warn)
+                .level_for("wry", log::LevelFilter::Warn)
+                .level_for("hyper", log::LevelFilter::Warn)
+                .level_for("polling", log::LevelFilter::Warn)
+                .build(),
+        )
         .manage(pty::PtyManager::default())
         .manage(watch::WatchManager::default())
         .invoke_handler(tauri::generate_handler![

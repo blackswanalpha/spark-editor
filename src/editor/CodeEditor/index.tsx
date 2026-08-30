@@ -55,7 +55,9 @@ import {
   langFor,
   langIdOf,
 } from "./languages";
+import { indentUnit } from "@codemirror/language";
 import { useDocs } from "@store/documents";
+import { useSettings } from "@store/settings";
 import { useTheme } from "@theme/ThemeProvider";
 import { Button } from "@ui/Button";
 import { LangLogo } from "@ui/LangLogo";
@@ -130,6 +132,16 @@ const goToLineCmd = (line: number): StateCommand => ({ state, dispatch }) => {
   return true;
 };
 
+/* Font size has to reach the scroller and the gutter together, or the
+   line numbers stop lining up with the lines they number. */
+function typeTheme(fontSize: number): Extension {
+  return EditorView.theme({
+    "&": { fontSize: `${fontSize}px` },
+    ".cm-scroller": { fontSize: `${fontSize}px`, lineHeight: "1.55" },
+    ".cm-gutters": { fontSize: `${fontSize}px` },
+  });
+}
+
 /* ----------------------------------------------------------------
    Component
    ---------------------------------------------------------------- */
@@ -144,11 +156,28 @@ export function CodeEditor({ docId, onCursor }: Props) {
   const langComp = useRef(new Compartment()).current;
   const themeComp = useRef(new Compartment()).current;
   const wrapComp = useRef(new Compartment()).current;
+  /* Settings-driven extensions get their own compartments so a
+     preference change reconfigures the running view instead of
+     rebuilding the editor and losing history and cursor. */
+  const typeComp = useRef(new Compartment()).current;
+  const gutterComp = useRef(new Compartment()).current;
+  const indentComp = useRef(new Compartment()).current;
 
   const doc = useDocs((s) => s.docs[docId]);
   const setRaw = useDocs((s) => s.setRaw);
   const setCursor = useDocs((s) => s.setCursor);
   const { resolved } = useTheme();
+
+  const fontSize = useSettings((s) => s.settings.editor.fontSize);
+  const tabSize = useSettings((s) => s.settings.editor.tabSize);
+  const showLineNumbers = useSettings((s) => s.settings.editor.lineNumbers);
+  const defaultWrap = useSettings((s) => s.settings.editor.wordWrap);
+
+  /* The build effect below runs only on docId, so it must not close over
+     a stale settings snapshot; the refs give it today's values without
+     making it a dependency. */
+  const initialRef = useRef({ fontSize, tabSize, showLineNumbers, defaultWrap });
+  initialRef.current = { fontSize, tabSize, showLineNumbers, defaultWrap };
 
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoValue, setGotoValue] = useState("");
@@ -169,11 +198,14 @@ export function CodeEditor({ docId, onCursor }: Props) {
   /* -- Build the editor once per docId ------------------------ */
   useEffect(() => {
     if (!ref.current || !doc) return;
-    const initialWrap = wordWrapByDoc.get(docId) ?? true;
+    const init = initialRef.current;
+    const initialWrap = wordWrapByDoc.get(docId) ?? init.defaultWrap;
     const state = EditorState.create({
       doc: doc.raw,
       extensions: [
-        lineNumbers(),
+        gutterComp.of(init.showLineNumbers ? lineNumbers() : []),
+        typeComp.of(typeTheme(init.fontSize)),
+        indentComp.of([EditorState.tabSize.of(init.tabSize), indentUnit.of(" ".repeat(init.tabSize))]),
         highlightActiveLine(),
         highlightSelectionMatches(),
         history(),
@@ -284,6 +316,26 @@ export function CodeEditor({ docId, onCursor }: Props) {
       effects: themeComp.reconfigure(EditorView.theme({}, { dark: resolved !== "light" })),
     });
   }, [resolved]);
+
+  /* -- Settings swaps ---------------------------------------- */
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: typeComp.reconfigure(typeTheme(fontSize)) });
+  }, [fontSize, typeComp]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: gutterComp.reconfigure(showLineNumbers ? lineNumbers() : []),
+    });
+  }, [showLineNumbers, gutterComp]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: indentComp.reconfigure([
+        EditorState.tabSize.of(tabSize),
+        indentUnit.of(" ".repeat(tabSize)),
+      ]),
+    });
+  }, [tabSize, indentComp]);
 
   /* -- Toolbar handlers -------------------------------------- */
   const openGoTo = useCallback(() => {

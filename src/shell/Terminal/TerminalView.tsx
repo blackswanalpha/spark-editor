@@ -28,13 +28,12 @@ import {
   type PtyPrivilege,
   type PtySpan,
 } from "@bridge/pty";
+import { useSettings } from "@store/settings";
 import { useCellMetrics } from "./useCellMetrics";
 import { applyFrame as reduceFrame, emptyGrid, isFresh, type Grid } from "./grid";
 import "./TerminalView.css";
 
 const FONT_FAMILY = '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace';
-const FONT_SIZE = 13;
-const LINE_HEIGHT = 1.35;
 const PADDING = 8;
 
 export type TerminalStatus =
@@ -55,7 +54,18 @@ interface Props {
 export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const screenRef = useRef<HTMLDivElement | null>(null);
-  const cell = useCellMetrics(FONT_FAMILY, FONT_SIZE, LINE_HEIGHT);
+
+  /* Typography and scroll feel come from Settings → Terminal. Changing
+     the font size changes the cell, which changes rows/cols, which the
+     size effect below reports to the host — so the shell always agrees
+     with what is on screen. */
+  const fontSize = useSettings((s) => s.settings.terminal.fontSize);
+  const lineHeight = useSettings((s) => s.settings.terminal.lineHeight);
+  const cursorStyle = useSettings((s) => s.settings.terminal.cursorStyle);
+  const cursorBlink = useSettings((s) => s.settings.terminal.cursorBlink);
+  const scrollRows = useSettings((s) => s.settings.terminal.scrollRows);
+
+  const cell = useCellMetrics(FONT_FAMILY, fontSize, lineHeight);
 
   const [grid, setGrid] = useState<Grid>(() => emptyGrid(24));
   const [size, setSize] = useState({ rows: 24, cols: 80 });
@@ -251,12 +261,12 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     (e: React.WheelEvent<HTMLDivElement>) => {
       const id = sessionRef.current;
       if (!id) return;
-      // Three rows per notch matches the platform convention closely
-      // enough and keeps long output navigable.
-      const delta = e.deltaY > 0 ? -3 : 3;
+      // Rows per notch is a preference: three matches the platform
+      // convention, but a tall panel wants more per flick.
+      const delta = e.deltaY > 0 ? -scrollRows : scrollRows;
       void ptyScroll(id, delta).catch(() => {});
     },
-    [],
+    [scrollRows],
   );
 
   /* Copy the selection with Ctrl+Shift+C, the terminal convention. */
@@ -271,12 +281,12 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
   const gridStyle = useMemo(
     () => ({
       fontFamily: FONT_FAMILY,
-      fontSize: `${FONT_SIZE}px`,
+      fontSize: `${fontSize}px`,
       lineHeight: `${cell.height}px`,
       width: `${size.cols * cell.width}px`,
       height: `${size.rows * cell.height}px`,
     }),
-    [cell.width, cell.height, size.cols, size.rows],
+    [cell.width, cell.height, size.cols, size.rows, fontSize],
   );
 
   const showCursor = cursor.visible && focused && status.phase === "running" && scrolledBack === 0;
@@ -312,7 +322,7 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
 
         {showCursor && (
           <div
-            className="tv__cursor"
+            className={`tv__cursor tv__cursor--${cursorStyle} ${cursorBlink ? "is-blinking" : ""}`}
             style={{
               top: cursor.row * cell.height,
               left: cursor.col * cell.width,

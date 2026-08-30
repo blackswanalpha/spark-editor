@@ -3597,6 +3597,7 @@ version = "0.3.3"
 dependencies = [
  "anyhow",
  "chrono",
+ "log",
  "notify",
  "portable-pty",
  "serde",

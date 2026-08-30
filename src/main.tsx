@@ -14,6 +14,7 @@ import "@fontsource-variable/jetbrains-mono/wght-italic.css";
 
 import "./theme/tokens.css";
 import "./theme/base.css";
+import "./theme/density.css";
 
 const root = document.getElementById("root")!;
 ReactDOM.createRoot(root).render(

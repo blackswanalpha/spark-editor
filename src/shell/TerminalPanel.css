@@ -6,6 +6,12 @@
    Colours come from theme tokens rather than the hard-coded dark
    hexes this file used to carry, so the panel follows the app's
    theme instead of staying dark in the light and amber themes.
+
+   Mobile view is CSS-only: .term--mobile overrides the panel's
+   inline width/height and sizes the *surface* from
+   --term-mobile-w / --term-mobile-h. Leaving mobile drops the
+   override and the panel is back at whatever the user dragged it
+   to, with nothing to remember in JS.
    ============================================================ */
 
 .term--floating {
@@ -139,6 +145,137 @@
   cursor: pointer;
 }
 .term__icon-btn:hover { background: var(--surface-3); color: var(--text); }
+.term__icon-btn.is-on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.term__icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------- Tab strip (one tab per shell) ---------- */
+
+.term__tabs {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+/* The tab list scrolls; the actions after the gap do not, so Root and
+   Restart stay reachable no matter how many shells are open. */
+.term__tabList {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.term__tabList::-webkit-scrollbar { display: none; }
+
+.term__tabs-gap { flex: 1; min-width: 0; }
+
+.term__tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 4px 0 9px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  max-width: 168px;
+  user-select: none;
+}
+.term__tab:hover { background: var(--surface-3); color: var(--text); }
+.term__tab:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+
+.term__tab.is-active {
+  background: var(--surface-1);
+  color: var(--text);
+}
+/* Underline the active tab against the panel body it opens onto. */
+.term__tab.is-active::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -4px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.term__tabName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.term__tabIcon--root { color: var(--danger); }
+
+/* The close control holds its space at all times: revealing it on hover
+   would reflow the strip and shift the tab out from under the pointer. */
+.term__tabClose {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  cursor: pointer;
+  padding: 0;
+}
+.term__tab:hover .term__tabClose,
+.term__tab.is-active .term__tabClose { opacity: 0.65; }
+.term__tabClose:hover { opacity: 1; background: var(--surface-4); color: var(--danger); }
+.term__tabClose:focus-visible { opacity: 1; box-shadow: var(--focus-ring); outline: none; }
+
+.term__tabAdd {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.term__tabAdd:hover { background: var(--surface-3); color: var(--accent); }
+.term__tabAdd:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+
+.term__count,
+.term__dims {
+  font-family: var(--font-code);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 
 .term__holder {
   flex: 1;
@@ -148,6 +285,10 @@
   padding: 4px;
   overflow: hidden;
 }
+/* [hidden] loses to display:flex on its own, and a still-flexing hidden
+   tab would halve the visible one's height. */
+.term__holder[hidden],
+.term-standalone__body[hidden] { display: none; }
 
 .term__footer {
   height: 28px;
@@ -227,9 +368,92 @@
   white-space: nowrap;
 }
 
+.term-standalone__gap { flex: 1; }
+
 .term-standalone__body {
   flex: 1;
   min-height: 0;
   display: flex;
   padding: 4px;
+}
+
+/* ---------- Mobile view ----------
+
+   Dimensions only: the surface becomes a phone viewport, with no
+   device frame, bezel or notch. The panel's inline width/height are
+   overridden rather than rewritten from JS, so leaving mobile needs
+   no saved-size bookkeeping.
+
+   The max-* clamps matter on small displays: a 450x844 preset on a
+   short window would otherwise push the footer off-screen and take
+   the close button with it. */
+
+/* The panel's width is stated, not shrink-wrapped.
+   `width: auto` on a fixed-position box is shrink-to-fit, which takes the
+   width of its WIDEST child — so the header and the tab strip decided the
+   panel's size and a few open tabs stretched it back to desktop width
+   with the phone-sized grid stranded at the left edge. Stating the width
+   makes the surface the thing that sets it, and the chrome rows shrink or
+   scroll inside it. */
+.term--mobile.term--floating {
+  width: calc(var(--term-mobile-w, 450px) + 10px) !important;
+  height: auto !important;
+  max-width: calc(100vw - 16px);
+}
+
+.term--mobile .term__holder,
+.term--mobile .term-standalone__body {
+  flex: none;
+  width: calc(var(--term-mobile-w, 450px) + 8px);
+  height: calc(var(--term-mobile-h, 844px) + 8px);
+  max-width: 100%;
+}
+
+/* Chrome to leave room for, so the surface never pushes the footer (and
+   the close button with it) off the bottom of the display. The docked
+   panel carries header + tabs + footer; the pop-out only bar + tabs. */
+.term--mobile .term__holder { max-height: calc(100vh - 116px); }
+.term--mobile .term-standalone__body { max-height: calc(100vh - 72px); }
+
+/* At phone width the strip cannot carry labelled buttons beside the
+   tabs, and a tab has to give up some of its name. The cwd goes
+   entirely — it is already the tab's tooltip, and at 450px it would eat
+   the shell's name. */
+.term--mobile .term__btn span { display: none; }
+.term--mobile .term__btn { padding: 0 7px; }
+.term--mobile .term__cwd { display: none; }
+.term--mobile .term__header { padding-left: 10px; }
+.term--mobile .term__tab { max-width: 116px; }
+.term--mobile .term__count { display: none; }
+.term--mobile .term__resizeHandle { display: none; }
+
+/* Nothing in the chrome may widen the panel past the stated width. */
+.term--mobile .term__header,
+.term--mobile .term__footer,
+.term--mobile .term__tabs { min-width: 0; }
+.term--mobile .term__title { min-width: 0; overflow: hidden; }
+.term--mobile .term__title > span:first-of-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The pop-out paints its whole window in the terminal colour, so a
+   centred phone-sized grid was invisible as one: the surface and the
+   space around it were the same dark. In mobile the backdrop becomes the
+   app background and the surface gets an edge, so the viewport you asked
+   for is the thing you can actually see. */
+.term-standalone.is-mobile {
+  align-items: center;
+  background: var(--bg);
+}
+.term-standalone.is-mobile .term-standalone__bar,
+.term-standalone.is-mobile .term__tabs {
+  width: 100%;
+}
+.term-standalone.is-mobile .term-standalone__body {
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: var(--term-bg);
 }

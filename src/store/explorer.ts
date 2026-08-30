@@ -33,7 +33,9 @@ export interface ExplorerNode {
 }
 
 export interface FileChangeEvent {
-  kind: "created" | "removed" | "renamed" | "modified";
+  /** "bulk" carries no path: the host coalesced more changes than it was
+   *  willing to send individually, and every cached listing is suspect. */
+  kind: "created" | "removed" | "renamed" | "modified" | "bulk";
   path: string;
   from?: string;       // for "renamed"
   isDir?: boolean;
@@ -799,7 +801,16 @@ export const useExplorer = create<State & Actions>((set, get) => ({
     const unlisten = await on<FileChangeEvent>("file:changed", (evt) => {
       const state = get();
       const root = state.root;
-      if (!root || !evt?.path) return;
+      if (!root || !evt) return;
+
+      // Too much changed at once to name it. Re-read what is on screen
+      // rather than trusting listings taken before the storm.
+      if (evt.kind === "bulk") {
+        for (const dir of state.children.keys()) void state.loadChildren(dir);
+        if (!state.children.has(root)) void state.loadChildren(root);
+        return;
+      }
+      if (!evt.path) return;
       // Find the closest known ancestor of evt.path (or evt.from for renames)
       // that exists in our children cache, and refresh it.
       const candidate = evt.kind === "renamed" ? (evt.from ?? evt.path) : evt.path;
