@@ -9,6 +9,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 ## [Unreleased]
 
 ### Added
+- Nothing yet.
+
+### Changed
+- Nothing yet.
+
+### Fixed
+- Nothing yet.
+
+---
+
+## [0.6.0] — 2026-08-31
+
+### Added
 - **Projects.** A project is an opened folder — no naming step, and nothing written into your directories. Opening a folder creates or touches its record, and each project remembers its own tabs, tree and terminals. **File → Switch Project…** lists them, most-recent-first, with in-place rename and remove. The **Close Project** command clears the front project without losing its record.
 - **Continue where you stopped.** On launch the most recently opened project is restored silently: its open tabs in order with their editor mode, caret and scroll offset; the active tab; the explorer root, expanded directories, hidden-file toggle and selection; terminal tabs at their previous working directory and privilege; and the terminal panel, sidebar and status-bar layout. Files deleted since last quit are dropped with one summary notification.
 - **The empty state is about projects now.** "New document" is gone; the cards are **New project…**, **Switch project…** (with a count of remembered folders) and **Open file…**, over a **Recent projects** list showing each folder's path and how many tabs come back with it. With a project open the heading reads "No files open in <project>" rather than greeting you as a first-time user.
