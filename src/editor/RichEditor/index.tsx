@@ -17,6 +17,7 @@ import { Popover, PopoverContent } from "@ui/Popover";
 import { motion } from "@motion/index";
 import "../editor.css";
 import "./RichEditor.css";
+import { restoreElementScroll, trackElementScroll } from "@editor/CodeEditor/viewState";
 
 /* ----------------------------------------------------------------
    Slash menu definition. A flat list of block transforms the
@@ -97,6 +98,7 @@ const SLASH_ITEMS: SlashItem[] = [
 export function RichEditor({ docId }: { docId: string }) {
   const doc = useDocs((s) => s.docs[docId]);
   const setRaw = useDocs((s) => s.setRaw);
+  const setScroll = useDocs((s) => s.setScroll);
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: { HTMLAttributes: { class: "rich-code" } } }),
@@ -116,6 +118,29 @@ export function RichEditor({ docId }: { docId: string }) {
   const [linkHref, setLinkHref] = useState("");
   const [wrapped, setWrapped] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  /* Persisted scroll offset, read through a ref so the effect below is
+     keyed on docId alone rather than re-running on every keystroke. */
+  const scrollRef = useRef(doc?.scrollTop);
+  scrollRef.current = doc?.scrollTop;
+
+  /* Restore and then track the offset of the element that actually
+     scrolls — .editor, which EditorContent carries. It only exists once
+     the editor has mounted, hence the editor dependency. */
+  useEffect(() => {
+    if (!editor) return;
+    const el = containerRef.current?.querySelector<HTMLElement>(".editor--rich");
+    if (!el) return;
+    const cancelRestore = restoreElementScroll(el, scrollRef.current);
+    const stopTracking = trackElementScroll(el, (top) => setScroll(docId, top));
+    return () => {
+      cancelRestore();
+      stopTracking();
+      // Last read before this surface unmounts — an inactive tab is not
+      // rendered, so there is no later chance.
+      setScroll(docId, Math.round(el.scrollTop));
+    };
+  }, [editor, docId, setScroll]);
 
   // Keep editor in sync if the doc is reset externally
   useEffect(() => {

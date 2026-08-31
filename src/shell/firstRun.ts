@@ -34,7 +34,14 @@ export function resetOnboarding(): void {
  * the user has nothing to come back to (no recents, no session).
  * Users who already have files on screen are never interrupted.
  */
-export function shouldShowWelcome(opts: { recentsCount: number; docsOpen: number }): boolean {
+export function shouldShowWelcome(opts: {
+  recentsCount: number;
+  docsOpen: number;
+  /** Folders opened before. A user with a project is, by definition, not
+      on their first run — so a stored project always beats the wizard. */
+  projectsCount?: number;
+}): boolean {
   if (isOnboarded()) return false;
+  if ((opts.projectsCount ?? 0) > 0) return false;
   return opts.recentsCount === 0 && opts.docsOpen === 0;
 }

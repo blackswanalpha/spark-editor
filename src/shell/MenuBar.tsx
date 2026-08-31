@@ -87,6 +87,9 @@ const DOC_GATED = new Set<string>([
 /* Commands whose own run() does the talking — MenuBar should not
    also pop a toast. Keeps the UI quiet for self-explanatory ones. */
 const SILENT_COMMANDS = new Set<string>([
+  "project.switch",
+  "project.close",
+  "file.recent",
   "help.about",
   "help.docs",
   "help.releaseNotes",

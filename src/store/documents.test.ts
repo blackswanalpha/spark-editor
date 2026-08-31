@@ -152,6 +152,38 @@ describe("saveAllDirty", () => {
   });
 });
 
+describe("scroll position", () => {
+  it("defaults to 0 on open", () => {
+    const id = useDocs.getState().open({ name: "a.ts", path: "/a.ts", raw: "x" });
+    expect(useDocs.getState().docs[id].scrollTop).toBe(0);
+  });
+
+  it("seeds from the init object, so a restored tab lands where it was left", () => {
+    const id = useDocs.getState().open({ name: "a.ts", path: "/a.ts", raw: "x", scrollTop: 480 });
+    expect(useDocs.getState().docs[id].scrollTop).toBe(480);
+  });
+
+  it("updates only the target document", () => {
+    const a = useDocs.getState().open({ name: "a.ts", path: "/a.ts", raw: "x" });
+    const b = useDocs.getState().open({ name: "b.ts", path: "/b.ts", raw: "y" });
+    useDocs.getState().setScroll(a, 120);
+    expect(useDocs.getState().docs[a].scrollTop).toBe(120);
+    expect(useDocs.getState().docs[b].scrollTop).toBe(0);
+  });
+
+  it("never marks the document dirty — scroll is view state, not content", () => {
+    const id = useDocs.getState().open({ name: "a.ts", path: "/a.ts", raw: "x" });
+    useDocs.getState().setScroll(id, 200);
+    expect(useDocs.getState().docs[id].dirty).toBe(false);
+  });
+
+  it("is a no-op for an unknown id", () => {
+    const before = useDocs.getState().docs;
+    useDocs.getState().setScroll("doc-does-not-exist", 50);
+    expect(useDocs.getState().docs).toBe(before);
+  });
+});
+
 describe("document store — lifecycle races", () => {
   beforeEach(() => {
     useDocs.setState({ docs: {}, order: [], active: null, history: {} });

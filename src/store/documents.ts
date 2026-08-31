@@ -24,6 +24,9 @@ export interface OpenDoc {
   raw: string;                  // raw text — used for code / markdown
   dirty: boolean;
   cursor: { line: number; col: number };
+  /** Scroll offset of the editor surface, in px. Persisted per project
+      so a restored tab lands where it was left. */
+  scrollTop: number;
 }
 
 /**
@@ -58,6 +61,7 @@ interface Actions {
   setRaw:  (id: string, raw: string) => void;
   setIr:   (id: string, ir: Document) => void;
   setCursor: (id: string, c: { line: number; col: number }) => void;
+  setScroll: (id: string, scrollTop: number) => void;
   markClean: (id: string) => void;
   undo: (id: string) => void;
   redo: (id: string) => void;
@@ -90,7 +94,8 @@ export const useDocs = create<State & Actions>((set, get) => ({
       ir: init.ir ?? { version: 1, blocks: [] },
       raw: init.raw ?? "",
       dirty: false,
-      cursor: { line: 1, col: 1 },
+      cursor: init.cursor ?? { line: 1, col: 1 },
+      scrollTop: init.scrollTop ?? 0,
     };
     set((s) => ({
       docs: { ...s.docs, [id]: doc },
@@ -159,6 +164,14 @@ export const useDocs = create<State & Actions>((set, get) => ({
   setCursor: (id, c) => set((s) => (
     s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], cursor: c } } } : s
   )),
+
+  // Scroll is not part of the undo snapshot and never marks the doc
+  // dirty: it is view state, restored on the next launch.
+  setScroll: (id, scrollTop) => set((s) => {
+    const doc = s.docs[id];
+    if (!doc || doc.scrollTop === scrollTop) return s;
+    return { docs: { ...s.docs, [id]: { ...doc, scrollTop } } };
+  }),
 
   markClean: (id) => set((s) => (
     s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], dirty: false } } } : s

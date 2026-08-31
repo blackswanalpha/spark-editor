@@ -176,10 +176,22 @@ export function buildCommands(): CommandSpec[] {
       },
     },
     {
-      id: "file.recent", title: "Open Recent", category: "File",
+      id: "project.switch", title: "Switch Project…", category: "File",
+      icon: "folder", shortcut: mod("Shift+E"),
+      keywords: ["project", "workspace", "switch", "recent", "folder"],
+      run: () => { window.dispatchEvent(new CustomEvent("spark:projects:open")); },
+    },
+    {
+      id: "project.close", title: "Close Project", category: "File",
+      icon: "close",
+      keywords: ["project", "workspace", "close folder"],
+      run: () => { window.dispatchEvent(new CustomEvent("spark:project:close")); },
+    },
+    {
+      id: "file.recent", title: "Open Recent File", category: "File",
       icon: "refresh",
       keywords: ["recent", "history"],
-      run: () => { openPalette(); },
+      run: () => { window.dispatchEvent(new CustomEvent("spark:sidebar:tab", { detail: { tab: "recents" } })); },
     },
     {
       id: "file.save", title: "Save", category: "File",
