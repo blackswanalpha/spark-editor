@@ -142,7 +142,7 @@ export async function stopWatching(): Promise<void> {
 }
 
 /* ---------- Helpers ---------- */
-function normalizeRoot(path: string): string {
+export function normalizeRoot(path: string): string {
   if (!path) return "/";
   let p = String(path).trim();
   // Strip surrounding quotes (some dialogs return quoted paths).

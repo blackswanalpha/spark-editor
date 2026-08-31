@@ -59,6 +59,18 @@ export function SideBar({
   recents, onOpen, activePath, onRequestOpenFolder, onInfo, onError, onCollapse,
 }: SideBarProps) {
   const [tab, setTab] = useState<"files" | "recents">("files");
+
+  /* "Open Recent File" in the palette/menu points here rather than at a
+     second file picker — the recents list already lives in this pane. */
+  useEffect(() => {
+    const onTab = (e: Event) => {
+      const want = (e as CustomEvent<{ tab?: "files" | "recents" }>).detail?.tab;
+      if (want === "files" || want === "recents") setTab(want);
+    };
+    window.addEventListener("spark:sidebar:tab", onTab);
+    return () => window.removeEventListener("spark:sidebar:tab", onTab);
+  }, []);
+
   return (
     <aside className="sidebar">
       <div className="sidebar__tabs" role="tablist">

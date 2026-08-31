@@ -20,16 +20,23 @@ import { Button } from "@ui/Button";
 import { motion } from "@motion/index";
 import { renderMd } from "./renderMd";
 import "../editor.css";
+import { restoreViewState, trackScroll } from "@editor/CodeEditor/viewState";
 
 export function MarkdownEditor({ docId }: { docId: string }) {
   const doc = useDocs((s) => s.docs[docId]);
   const setRaw = useDocs((s) => s.setRaw);
   const setCursor = useDocs((s) => s.setCursor);
+  const setScroll = useDocs((s) => s.setScroll);
   const ref = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [preview, setPreview] = useState(true);
   const { isDark } = useTheme();
   const themeComp = useRef(new Compartment()).current;
+
+  /* Persisted caret and scroll, read through a ref so the build effect
+     below stays keyed on docId alone. */
+  const restoreRef = useRef({ cursor: doc?.cursor, scrollTop: doc?.scrollTop });
+  restoreRef.current = { cursor: doc?.cursor, scrollTop: doc?.scrollTop };
 
   useEffect(() => {
     if (!ref.current || !doc) return;
@@ -67,7 +74,15 @@ export function MarkdownEditor({ docId }: { docId: string }) {
     });
     const v = new EditorView({ state, parent: ref.current });
     viewRef.current = v;
-    return () => { v.destroy(); viewRef.current = null; };
+    const cancelRestore = restoreViewState(v, restoreRef.current.cursor, restoreRef.current.scrollTop);
+    const stopTracking = trackScroll(v, (top) => setScroll(docId, top));
+    return () => {
+      cancelRestore();
+      stopTracking();
+      setScroll(docId, Math.round(v.scrollDOM.scrollTop));
+      v.destroy();
+      viewRef.current = null;
+    };
   }, [docId]);
 
   useEffect(() => {

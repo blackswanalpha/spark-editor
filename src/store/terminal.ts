@@ -22,6 +22,15 @@ import {
 } from "@shell/Terminal/sessions";
 import type { PtyPrivilege } from "@bridge/pty";
 
+/** Floating panel geometry. Lives here rather than in TerminalDialog's
+    local state so it can be captured into the project workspace. */
+export interface PanelRect { x: number; y: number; w: number; h: number }
+
+export const DEFAULT_PANEL: PanelRect = { x: 0, y: 0, w: 720, h: 440 };
+
+/** One restored terminal tab: the shell is respawned, not replayed. */
+export interface RestoredTab { cwd: string; privilege: PtyPrivilege; label: string }
+
 interface TerminalState {
   isOpen: boolean;
   sessions: TerminalSession[];
@@ -30,6 +39,10 @@ interface TerminalState {
   nextOrdinal: number;
   /** Panel pinned to the mobile viewport from Settings → Terminal. */
   mobile: boolean;
+  /** Floating panel position and size. */
+  panel: PanelRect;
+  /** False until the panel has placed itself for the first time. */
+  panelPlaced: boolean;
 
   open: () => void;
   close: () => void;
@@ -46,6 +59,9 @@ interface TerminalState {
   restartSession: (id: string) => void;
   setSessionTitle: (id: string, title: string | null) => void;
   setMobile: (m: boolean) => void;
+  setPanelRect: (patch: Partial<PanelRect>, placed?: boolean) => void;
+  /** Rebuild the tab list from a persisted workspace. */
+  restoreTabs: (tabs: RestoredTab[], activeIndex: number, nextOrdinal: number, isOpen: boolean) => void;
 }
 
 const defaultPrivilege = () => getSettings().terminal.defaultPrivilege;
@@ -56,6 +72,8 @@ export const useTerminal = create<TerminalState>((set) => ({
   activeId: null,
   nextOrdinal: 1,
   mobile: false,
+  panel: { ...DEFAULT_PANEL },
+  panelPlaced: false,
 
   // Opening does not spawn anything: the panel derives the cwd from the
   // explorer and calls ensureSession once it has one.
@@ -126,6 +144,31 @@ export const useTerminal = create<TerminalState>((set) => ({
     set((s) => ({ sessions: patchSession(s.sessions, id, { title }) })),
 
   setMobile: (mobile) => set({ mobile }),
+
+  setPanelRect: (patch, placed) =>
+    set((s) => ({
+      panel: { ...s.panel, ...patch },
+      panelPlaced: placed ?? s.panelPlaced,
+    })),
+
+  // Restore builds sessions directly rather than through addSession,
+  // which hard-codes the *default* privilege and cannot reproduce a
+  // saved one. Every tab starts at restartKey 0 with a fresh shell:
+  // scrollback is not persisted, only where the shell was rooted.
+  restoreTabs: (tabs, activeIndex, nextOrdinal, isOpen) =>
+    set(() => {
+      const sessions = tabs.map((t, i) => ({
+        ...createSession(t.cwd, t.privilege, i + 1),
+        label: t.label,
+      }));
+      const idx = activeIndex >= 0 && activeIndex < sessions.length ? activeIndex : 0;
+      return {
+        sessions,
+        activeId: sessions.length ? sessions[idx].id : null,
+        nextOrdinal: Math.max(nextOrdinal, sessions.length + 1),
+        isOpen: isOpen && sessions.length > 0,
+      };
+    }),
 }));
 
 /** Imperative entry point for non-React callers (context menu, bubble menu). */

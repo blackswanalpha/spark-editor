@@ -12,9 +12,25 @@ import { staggerParent, staggerItem } from "@motion/index";
 import { useAppVersion } from "@version";
 import "./Onboarding.css";
 
+export interface OnboardingProject {
+  id: string;
+  name: string;
+  rootPath: string | null;
+  /** Tabs stored in this project's workspace, shown as a hint of what
+      reopening it will bring back. */
+  tabCount?: number;
+}
+
 export interface OnboardingScreenProps {
   recents: { path: string; name: string }[];
-  onCreate: () => void;
+  /** Folders opened before, most-recent-first. Optional so the single
+      existing call site stays valid. */
+  projects?: OnboardingProject[];
+  /** Name of the project currently in front, when there is one. */
+  projectName?: string;
+  onOpenProject?: (id: string) => void;
+  /** Opens the project switcher. */
+  onSwitchProject?: () => void;
   onOpenFile: () => void;
   onOpenFolder: () => void;
   onOpenRecent: (path: string) => void;
@@ -23,7 +39,10 @@ export interface OnboardingScreenProps {
 
 export function OnboardingScreen({
   recents,
-  onCreate,
+  projects = [],
+  projectName,
+  onOpenProject,
+  onSwitchProject,
   onOpenFile,
   onOpenFolder,
   onOpenRecent,
@@ -47,29 +66,67 @@ export function OnboardingScreen({
         width={64}
         height={64}
       />
-      <motion.div variants={staggerItem} className="onboard__title">Welcome to sparkEditor</motion.div>
+      <motion.div variants={staggerItem} className="onboard__title">
+        {projectName ? `No files open in ${projectName}` : "Welcome to sparkEditor"}
+      </motion.div>
       <motion.p variants={staggerItem} className="onboard__sub">
-        One window for markdown, rich text, and code. The file on disk is the source of truth —
-        no proprietary format, no lock-in. Start something new, or pick up where you left off.
+        {projectName
+          ? "Pick a file from the tree on the left. This project remembers its own tabs, tree and terminals, and comes back the way you left it."
+          : "Open a folder and it becomes a project — its tabs, tree and terminals are remembered and restored the next time you launch. Nothing is written into your directories."}
       </motion.p>
 
       <motion.div variants={staggerItem} className="onboard__cards">
-        <button className="onboard-card" type="button" onClick={onCreate}>
-          <Icon name="plus" size={20} className="onboard-card__icon" />
-          <strong>New document</strong>
-          <small>Start an untitled markdown file</small>
+        <button className="onboard-card onboard-card--primary" type="button" onClick={onOpenFolder}>
+          <Icon name="folder" size={20} className="onboard-card__icon" />
+          <strong>{projects.length > 0 ? "New project…" : "Open a folder…"}</strong>
+          <small>A folder becomes a project — no setup</small>
         </button>
+        {projects.length > 0 && onSwitchProject && (
+          <button className="onboard-card" type="button" onClick={onSwitchProject}>
+            <Icon name="open" size={20} className="onboard-card__icon" />
+            <strong>Switch project…</strong>
+            <small>
+              {projects.length} folder{projects.length === 1 ? "" : "s"} remembered
+            </small>
+          </button>
+        )}
         <button className="onboard-card" type="button" onClick={onOpenFile}>
           <Icon name="file" size={20} className="onboard-card__icon" />
           <strong>Open file…</strong>
-          <small>Native dialog runs on the host</small>
-        </button>
-        <button className="onboard-card" type="button" onClick={onOpenFolder}>
-          <Icon name="folder-open" size={20} className="onboard-card__icon" />
-          <strong>Open folder…</strong>
-          <small>Explore a directory tree</small>
+          <small>A single file, without a project</small>
         </button>
       </motion.div>
+
+      {projects.length > 0 && onOpenProject && (
+        <motion.div variants={staggerItem} className="onboard__recents">
+          <div className="onboard__recents-title">Recent projects</div>
+          <ul className="onboard__recents-list">
+            {projects.slice(0, 5).map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  className="onboard__project"
+                  onClick={() => onOpenProject(p.id)}
+                  title={p.rootPath ?? p.name}
+                >
+                  <Icon name="folder" size={14} className="onboard__project-icon" />
+                  <span className="onboard__project-name">{p.name}</span>
+                  {/* A renamed project shows where it points; one still
+                      named after its own folder would just repeat itself. */}
+                  <span className="onboard__project-path">
+                    {p.rootPath && p.rootPath !== p.name ? p.rootPath : ""}
+                  </span>
+                  {p.tabCount ? (
+                    <span className="onboard__project-tabs">
+                      {p.tabCount} tab{p.tabCount === 1 ? "" : "s"}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </motion.div>
+      )}
 
       <motion.div variants={staggerItem} className="onboard__recents">
         <div className="onboard__recents-title">Recent files</div>
@@ -91,8 +148,8 @@ export function OnboardingScreen({
       </motion.div>
 
       <motion.div variants={staggerItem} className="onboard__hint">
-        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> to open a folder · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>{" "}
-        for the command palette
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> to open a folder · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>{" "}
+        to switch project · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> for the command palette
       </motion.div>
       <motion.div variants={staggerItem}>
         <Button variant="ghost" icon="command" onClick={onPalette} className="onboard__palette-link">

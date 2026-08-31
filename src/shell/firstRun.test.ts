@@ -35,4 +35,12 @@ describe("firstRun", () => {
     expect(shouldShowWelcome({ recentsCount: 3, docsOpen: 0 })).toBe(false);
     expect(shouldShowWelcome({ recentsCount: 0, docsOpen: 2 })).toBe(false);
   });
+
+  it("shouldShowWelcome: false once the user has a project — not a first run", () => {
+    expect(shouldShowWelcome({ recentsCount: 0, docsOpen: 0, projectsCount: 1 })).toBe(false);
+  });
+
+  it("shouldShowWelcome: still true with no projects, no recents, nothing open", () => {
+    expect(shouldShowWelcome({ recentsCount: 0, docsOpen: 0, projectsCount: 0 })).toBe(true);
+  });
 });

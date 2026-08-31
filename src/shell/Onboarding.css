@@ -126,3 +126,71 @@
 @media (prefers-reduced-motion: reduce) {
   .onboard__logo { animation: none; }
 }
+
+/* ----------------------------------------------------------------
+   Recent projects. A project row carries more than a filename does —
+   the folder it points at and how much comes back with it — so it gets
+   its own three-part row rather than reusing the flat recents button.
+   ---------------------------------------------------------------- */
+
+.onboard__project {
+  display: grid;
+  grid-template-columns: auto minmax(0, auto) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.onboard__project:hover,
+.onboard__project:focus-visible {
+  background: var(--bg-hover);
+}
+
+.onboard__project-icon {
+  align-self: center;
+  opacity: 0.7;
+}
+
+.onboard__project-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.onboard__project-path {
+  min-width: 0;
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Truncate from the left: the tail of a path identifies it, the root
+     rarely does. */
+  direction: rtl;
+  text-align: left;
+}
+
+.onboard__project-tabs {
+  flex: 0 0 auto;
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The primary action reads as the one to take on a blank slate. */
+.onboard-card--primary {
+  border-color: var(--accent);
+}
+
+.onboard-card--primary .onboard-card__icon {
+  color: var(--accent);
+}

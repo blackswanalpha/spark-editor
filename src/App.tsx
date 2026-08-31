@@ -35,6 +35,15 @@ import { ToastProvider, useToast } from "@ui/Toast";
 import { useDocs } from "@store/documents";
 import { useExplorer } from "@store/explorer";
 import { hydrateSettings } from "@store/settings";
+import { useProjects, hydrateProjects, projectId } from "@store/projects";
+import {
+  restoreWorkspace,
+  startWorkspaceAutosave,
+  flushWorkspace,
+  registerLayoutBridge,
+  markHydrated,
+  isRestoring,
+} from "@shell/workspace";
 import { readFile, recentsAdd, recentsGet, isTauri, pickMode } from "@bridge/commands";
 import { checkForUpdates, checkForUpdatesOnBoot } from "@bridge/updater";
 import { useSidebarLayout, SIDEBAR_MAX } from "@shell/useSidebarLayout";
@@ -43,7 +52,14 @@ import { Icon } from "@ui/Icon";
 import OpenDialog from "@ui/OpenDialog";
 import SaveAsModal from "@shell/SaveAsModal";
 import UnsavedChangesModal, { type UnsavedChoice } from "@shell/UnsavedChangesModal";
+import ProjectSwitcher from "@shell/ProjectSwitcher";
 import "./App.css";
+
+/* Boot latches. Module scope rather than a ref because StrictMode
+   remounts the component, which would reset a ref and re-run the
+   restore. */
+let bootStarted = false;
+let teardownAutosave: (() => void) | null = null;
 
 function Shell() {
   const { resolved } = useTheme();
@@ -100,6 +116,25 @@ function Shell() {
   /* Settings: read the persisted file and subscribe to changes made in
      the pop-out terminal window. */
   useEffect(() => hydrateSettings(), []);
+
+  /* Layout bridge: sidebar geometry lives in a React hook and the status
+     bar toggle is local state, so neither is reachable from the plain
+     workspace module. Hand it accessors instead of lifting the state. */
+  const showStatusRef = useRef(showStatus);
+  showStatusRef.current = showStatus;
+  const sidebarRef = useRef(sidebar);
+  sidebarRef.current = sidebar;
+  useEffect(() => {
+    registerLayoutBridge({
+      getWidth: () => sidebarRef.current.width,
+      getCollapsed: () => sidebarRef.current.collapsed,
+      getShowStatus: () => showStatusRef.current,
+      setWidth: (px) => sidebarRef.current.setWidth(px),
+      setCollapsed: (v) => sidebarRef.current.setCollapsed(v),
+      setShowStatus: (v) => setShowStatus(v),
+    });
+    return () => registerLayoutBridge(null);
+  }, []);
 
   /* Toast bridge: registry runs outside React and dispatches events
      that we forward to the in-tree toast API. */
@@ -163,6 +198,9 @@ function Shell() {
      window. */
   useEffect(() => {
     const onClose = async () => {
+      // Snapshot before anything tears down. This now runs on every quit
+      // path: the titlebar X routes through this event too.
+      flushWorkspace();
       const id = active;
       const doc = id ? useDocs.getState().docs[id] : null;
       if (!doc?.dirty) {
@@ -170,6 +208,7 @@ function Shell() {
         return;
       }
       pendingCloseRef.current = async () => {
+        flushWorkspace();
         try { await getCurrentWindow().close(); } catch {}
       };
       setUnsavedDocId(id);
@@ -181,37 +220,84 @@ function Shell() {
     return () => window.removeEventListener("spark:window:close:request", onClose);
   }, [active]);
 
-  // Boot: refresh recents + open last session (best effort).
-  // First run (no recents, nothing open, never onboarded) opens the
-  // welcome wizard instead of force-loading the sample document.
+  // Boot: read the projects cache, restore the last project's workspace,
+  // then fall through to recents / welcome only when nothing came back.
+  // StrictMode double-invokes this effect, and a second pass would open
+  // every restored tab twice, so the run is latched at module scope.
   useEffect(() => {
-    let cancelled = false;
+    if (bootStarted) return;
+    bootStarted = true;
+    // Deliberately no `cancelled` flag. StrictMode mounts, cleans up, and
+    // mounts again; a per-effect cancel would abort this run while the
+    // module latch blocks the second one, and boot would never finish.
+    // The latch already guarantees a single run, and React 18 tolerates
+    // a setState from an effect whose component has gone.
     (async () => {
+      await hydrateProjects();
+      markHydrated();
+
+      let restored = 0;
+      const project = useProjects.getState().active();
+      if (project) {
+        try {
+          const result = await restoreWorkspace(project.workspace);
+          restored = result.opened;
+          if (result.missing.length > 0) {
+            toast.info(
+              `${result.missing.length} file${result.missing.length === 1 ? "" : "s"} from your last session ${result.missing.length === 1 ? "is" : "are"} no longer available`,
+              result.missing.length === 1 ? result.missing[0] : undefined,
+            );
+          }
+          setCurrentRoot(project.rootPath);
+        } catch {
+          /* a broken snapshot must never block the editor from opening */
+        }
+      }
+
       let recentsCount = 0;
       try {
         const r = await recentsGet();
         recentsCount = r.length;
         setRecents(r.map((path) => ({ path, name: path.split("/").pop() || path })));
       } catch {}
-      if (shouldShowWelcome({ recentsCount, docsOpen: order.length })) {
-        if (!cancelled) {
+
+      if (restored === 0) {
+        // Read the store, not the `order` captured by this []-deps effect:
+        // that closure holds the first render's value and is always 0.
+        const docsOpen = useDocs.getState().order.length;
+        const projectsCount = useProjects.getState().projects.length;
+        if (shouldShowWelcome({ recentsCount, docsOpen, projectsCount })) {
           setWelcomeOpen(true);
           setBootReady(true);
+          teardownAutosave = startWorkspaceAutosave();
+          return;
         }
-        return;
-      }
-      try {
-        if (order.length === 0) {
-          const text = await readFile("/welcome.md");
-          const id = open({ name: "welcome.md", path: "/welcome.md", mode: "markdown", raw: text });
-          await recentsAdd("/welcome.md").catch(() => {});
+        // Projects exist but none is in front (the last one was closed or
+        // removed): offer the picker rather than guessing.
+        if (projectsCount > 0 && !project) {
+          setBootReady(true);
+          window.dispatchEvent(new CustomEvent("spark:projects:open"));
+          teardownAutosave = startWorkspaceAutosave();
+          return;
         }
-      } catch (e: any) {
-        toast.error("Could not open welcome document", e?.kind || "Unknown error");
+        try {
+          if (docsOpen === 0) {
+            const text = await readFile("/welcome.md");
+            open({ name: "welcome.md", path: "/welcome.md", mode: "markdown", raw: text });
+            await recentsAdd("/welcome.md").catch(() => {});
+          }
+        } catch (e: any) {
+          toast.error("Could not open welcome document", e?.kind || "Unknown error");
+        }
       }
-      if (!cancelled) setBootReady(true);
+
+      setBootReady(true);
+      // Started only now: subscribing before restore finishes would let
+      // the restore's own store writes overwrite the snapshot it is
+      // still reading from.
+      teardownAutosave = startWorkspaceAutosave();
+      flushWorkspace();
     })();
-    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -289,24 +375,92 @@ function Shell() {
     return () => window.removeEventListener("spark:help:welcome", onWelcome);
   }, []);
 
-  // Folder open: keep the registry's `currentRoot` and the explorer store
-  // in sync so the three readers see the same value.
+  // Folder open: this is also the project-switch path, so the outgoing
+  // project's workspace is flushed before anything is torn down, and the
+  // incoming one is restored from its own snapshot.
   useEffect(() => {
     const onFolderOpen = (e: Event) => {
-      const path = (e as CustomEvent<{ path: string }>).detail?.path;
-      if (!path) return;
-      setCurrentRoot(path);
-      void useExplorer.getState().setRoot(path);
+      const path = (e as CustomEvent<{ path: string | null }>).detail?.path ?? null;
+      const detail = (e as CustomEvent<{ projectId?: string }>).detail;
+      if (!path && !detail?.projectId) return;
+
+      const targetId = detail?.projectId ?? projectId(path);
+      if (targetId === useProjects.getState().activeId) {
+        // Re-opening the folder already in front: just re-root the tree.
+        if (path) void useExplorer.getState().setRoot(path);
+        return;
+      }
+
+      void (async () => {
+        flushWorkspace();
+        teardownAutosave?.();
+        teardownAutosave = null;
+
+        // Close every tab before switching; the outgoing snapshot is
+        // already saved, and leaving them open would leak one project's
+        // files into the next.
+        const docs = useDocs.getState();
+        for (const id of [...docs.order]) docs.close(id);
+
+        const project = useProjects.getState().openProject(path);
+        setCurrentRoot(project.rootPath);
+
+        const ws = project.workspace;
+        // A project opened for the first time has an empty snapshot, so
+        // fall back to simply rooting the tree at the chosen folder.
+        if (ws.tabs.length === 0 && !ws.explorer.root && path) {
+          await useExplorer.getState().setRoot(path);
+        } else {
+          const result = await restoreWorkspace(ws);
+          if (result.missing.length > 0) {
+            toast.info(
+              `${result.missing.length} file${result.missing.length === 1 ? "" : "s"} could not be reopened`,
+            );
+          }
+        }
+        teardownAutosave = startWorkspaceAutosave();
+        // Autosave only fires on a *subsequent* store change, so without
+        // this the newly-rooted project would sit in the cache with a
+        // null root until the user happened to touch something.
+        flushWorkspace();
+      })();
     };
     window.addEventListener("spark:folder:open", onFolderOpen);
     return () => window.removeEventListener("spark:folder:open", onFolderOpen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Close the active project: keep its snapshot, drop it from the front.
+  useEffect(() => {
+    const onCloseProject = () => {
+      flushWorkspace();
+      teardownAutosave?.();
+      teardownAutosave = null;
+      const docs = useDocs.getState();
+      for (const id of [...docs.order]) docs.close(id);
+      void useExplorer.getState().setRoot("/");
+      useExplorer.setState({ root: null, explicitRoot: false, expanded: new Set<string>() });
+      useProjects.getState().clearActive();
+      setCurrentRoot(null);
+      teardownAutosave = startWorkspaceAutosave();
+    };
+    window.addEventListener("spark:project:close", onCloseProject);
+    return () => window.removeEventListener("spark:project:close", onCloseProject);
   }, []);
 
   const activeDoc = active ? docs[active] : null;
 
+  const projectList = useProjects((s) => s.projects);
+  const activeProjectId = useProjects((s) => s.activeId);
+  const activeProject = projectList.find((p) => p.id === activeProjectId) ?? null;
+
   const explorerRoot = useExplorer((s) => s.root);
   const explicitRoot = useExplorer((s) => s.explicitRoot);
   useEffect(() => {
+    // Restore owns the root while it runs. setRoot already sets
+    // explicitRoot, so this is belt-and-braces against a future reorder
+    // of the restore steps.
+    if (isRestoring()) return;
     if (explicitRoot) return;
     if (explorerRoot) return;
     const path = activeDoc?.path;
@@ -445,7 +599,21 @@ function Shell() {
         ) : (
           <OnboardingScreen
             recents={recents}
-            onCreate={() => runCommand("file.new")}
+            projects={projectList.map((p) => ({
+              id: p.id,
+              name: p.name,
+              rootPath: p.rootPath,
+              tabCount: p.workspace.tabs.length,
+            }))}
+            projectName={activeProject?.name}
+            onOpenProject={(id) => {
+              const p = useProjects.getState().get(id);
+              if (!p) return;
+              window.dispatchEvent(
+                new CustomEvent("spark:folder:open", { detail: { path: p.rootPath, projectId: p.id } }),
+              );
+            }}
+            onSwitchProject={() => runCommand("project.switch")}
             onOpenFolder={() => runCommand("file.openFolder")}
             onOpenFile={() => runCommand("file.open")}
             onOpenRecent={async (path) => {
@@ -490,6 +658,7 @@ function Shell() {
       />
       <WelcomeWizard open={welcomeOpen} onOpenChange={setWelcomeOpen} />
       <OpenDialog />
+      <ProjectSwitcher />
       <SaveAsModal
         open={saveAsOpen}
         onOpenChange={(o) => {
