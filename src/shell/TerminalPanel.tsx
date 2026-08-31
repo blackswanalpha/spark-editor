@@ -267,14 +267,37 @@ export function TerminalDialog({
   const mobileW = useSettings((s) => s.settings.terminal.mobileWidth);
   const mobileH = useSettings((s) => s.settings.terminal.mobileHeight);
 
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [size, setSize] = useState({ w: 720, h: 440 });
+  /* Geometry lives in the store, not in local state, so it can be
+     captured into the project workspace — and so it survives a remount,
+     which the old placedRef could not. */
+  const panel = useTerminal((s) => s.panel);
+  const panelPlaced = useTerminal((s) => s.panelPlaced);
+  const setPanelRect = useTerminal((s) => s.setPanelRect);
+  // Memoised so the drag/resize callbacks below keep a stable identity.
+  const pos = useMemo(() => ({ x: panel.x, y: panel.y }), [panel.x, panel.y]);
+  const size = useMemo(() => ({ w: panel.w, h: panel.h }), [panel.w, panel.h]);
+  const setPos = useCallback(
+    (next: { x: number; y: number } | ((p: { x: number; y: number }) => { x: number; y: number })) => {
+      const cur = useTerminal.getState().panel;
+      const value = typeof next === "function" ? next({ x: cur.x, y: cur.y }) : next;
+      useTerminal.getState().setPanelRect(value);
+    },
+    [],
+  );
+  const setSize = useCallback(
+    (next: { w: number; h: number } | ((p: { w: number; h: number }) => { w: number; h: number })) => {
+      const cur = useTerminal.getState().panel;
+      const value = typeof next === "function" ? next({ w: cur.w, h: cur.h }) : next;
+      useTerminal.getState().setPanelRect(value);
+    },
+    [],
+  );
+
   const [statuses, setStatuses] = useState<Record<string, TerminalStatus>>({});
   const [rootSupport, setRootSupport] = useState<RootSupport | null>(null);
   const [popping, setPopping] = useState(false);
 
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
-  const placedRef = useRef(false);
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
 
@@ -304,13 +327,25 @@ export function TerminalDialog({
   /* Place the panel bottom-right on first open, then leave it where the
      user put it — re-centring on every open loses their arrangement. */
   useEffect(() => {
-    if (!open || placedRef.current) return;
-    placedRef.current = true;
-    setPos({
-      x: Math.max(12, window.innerWidth - size.w - 24),
-      y: Math.max(12, window.innerHeight - size.h - 56),
-    });
-  }, [open, size.w, size.h]);
+    if (!open || panelPlaced) return;
+    setPanelRect(
+      {
+        x: Math.max(12, window.innerWidth - size.w - 24),
+        y: Math.max(12, window.innerHeight - size.h - 56),
+      },
+      true,
+    );
+  }, [open, panelPlaced, setPanelRect, size.w, size.h]);
+
+  /* A restored rect was measured against the previous window. Pull it
+     back on screen once, rather than leaving the panel off the edge. */
+  useEffect(() => {
+    if (!open) return;
+    setPos((p) => ({
+      x: Math.min(p.x, Math.max(0, window.innerWidth - 120)),
+      y: Math.min(p.y, Math.max(0, window.innerHeight - 60)),
+    }));
+  }, [open, setPos]);
 
   /* Keep the panel reachable when the window shrinks under it. */
   useEffect(() => {
@@ -323,7 +358,7 @@ export function TerminalDialog({
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [open]);
+  }, [open, setPos]);
 
   useEffect(() => {
     if (!open || !isTauri) return;
@@ -380,7 +415,7 @@ export function TerminalDialog({
       x: Math.max(0, Math.min(window.innerWidth - 80, e.clientX - drag.dx)),
       y: Math.max(0, Math.min(window.innerHeight - 40, e.clientY - drag.dy)),
     });
-  }, []);
+  }, [setPos]);
 
   const endDrag = useCallback((e: React.PointerEvent) => {
     dragRef.current = null;
@@ -418,7 +453,7 @@ export function TerminalDialog({
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onUp);
     },
-    [pos.x, pos.y, size.w, size.h],
+    [pos.x, pos.y, size.w, size.h, setSize],
   );
 
   const togglePrivilege = useCallback(() => {
@@ -438,7 +473,7 @@ export function TerminalDialog({
       x: Math.max(8, Math.min(p.x, window.innerWidth - w - 8)),
       y: Math.max(8, Math.min(p.y, window.innerHeight - h - 8)),
     }));
-  }, [mobile, setMobile, mobileW, mobileH]);
+  }, [mobile, setMobile, mobileW, mobileH, setPos]);
 
   /* Pop out into a real OS window. The sessions live in the Rust host, so
      the new window opens its own — no state has to be handed across, and

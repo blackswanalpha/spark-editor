@@ -325,8 +325,9 @@ function mock<T>(cmd: string, args?: any): T {
 }
 
 /* ---------- App state ---------- */
-export const getAppState = () => call<any>("app_state_get");
-export const setAppState = (state: any) => call<void>("app_state_set", { state });
+/* App state used to live behind `app_state_get` / `app_state_set`. Those
+   Rust commands were never implemented; the workspace cache now owns that
+   job renderer-side — see src/store/projects.ts. */
 
 /* ---------- Recents ---------- */
 export const recentsGet  = () => call<string[]>("recents_get");
@@ -334,7 +335,6 @@ export const recentsAdd  = (path: string) => call<string[]>("recents_add", { pat
 export const recentsClear= () => call<void>("recents_clear");
 
 /* ---------- Window ---------- */
-export const windowSetTitle = (title: string) => call<void>("window_set_title", { title });
 
 /* ---------- Dialogs (Tauri + browser fallback) ---------- */
 /**

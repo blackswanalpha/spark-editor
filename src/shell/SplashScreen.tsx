@@ -35,8 +35,8 @@ const STAGES = [
   "loading assets…",
   "applying theme…",
   "connecting IPC bridge…",
-  "reading state.json…",
-  "restoring session…",
+  "reading projects.json…",
+  "restoring workspace…",
   "ready",
 ] as const;
 

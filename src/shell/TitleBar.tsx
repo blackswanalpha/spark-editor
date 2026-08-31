@@ -8,6 +8,7 @@
    ============================================================ */
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isTauri } from "@bridge/commands";
 import { Icon } from "@ui/Icon";
 import { useTheme } from "@theme/ThemeProvider";
 import { motion, tap } from "@motion/index";
@@ -39,24 +40,38 @@ export function TitleBar({ title = "Untitled", dirty, platform = "windows" }: Ti
   useEffect(() => {
     const full = `${dirty ? "• " : ""}${title} — sparkEditor`;
     try { document.title = full; } catch {}
-    const w = getCurrentWindow?.();
-    w?.setTitle?.(full).catch(() => {});
+    // getCurrentWindow() reads window.__TAURI_INTERNALS__.metadata and
+    // THROWS outside Tauri — the optional call cannot catch that, so the
+    // whole TitleBar was crashing the shell under `npm run dev`.
+    if (!isTauri) return;
+    try {
+      getCurrentWindow().setTitle(full).catch(() => {});
+    } catch {
+      /* host not reachable — the document title above is enough */
+    }
   }, [title, dirty]);
 
   const isMac = platform === "macos";
 
   // Window control handlers — Tauri-aware, with safe fallbacks
-  const min = () => getCurrentWindow?.()?.minimize?.().catch(() => {});
+  const min = () => {
+    if (!isTauri) return;
+    try { getCurrentWindow().minimize().catch(() => {}); } catch {}
+  };
   const tog = async () => {
+    if (!isTauri) return;
     try {
-      const w = getCurrentWindow?.();
+      const w = getCurrentWindow();
       if (!w) return;
       const m = await w.isMaximized();
       if (m) { await w.unmaximize(); setIsMax(false); }
       else   { await w.maximize();   setIsMax(true);  }
     } catch {}
   };
-  const close = () => getCurrentWindow?.()?.close?.().catch(() => {});
+  /* Route through the shell rather than closing directly: App owns the
+     unsaved-changes guard and the workspace flush, and both were being
+     skipped when this button called window.close() itself. */
+  const close = () => window.dispatchEvent(new CustomEvent("spark:window:close:request"));
 
   return (
     <div className={`titlebar titlebar--${platform}`} data-tauri-drag-region>

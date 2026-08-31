@@ -9,13 +9,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 ## [Unreleased]
 
 ### Added
-- Nothing yet.
+- **Projects.** A project is an opened folder — no naming step, and nothing written into your directories. Opening a folder creates or touches its record, and each project remembers its own tabs, tree and terminals. **File → Switch Project…** lists them, most-recent-first, with in-place rename and remove. The **Close Project** command clears the front project without losing its record.
+- **Continue where you stopped.** On launch the most recently opened project is restored silently: its open tabs in order with their editor mode, caret and scroll offset; the active tab; the explorer root, expanded directories, hidden-file toggle and selection; terminal tabs at their previous working directory and privilege; and the terminal panel, sidebar and status-bar layout. Files deleted since last quit are dropped with one summary notification.
+- **The empty state is about projects now.** "New document" is gone; the cards are **New project…**, **Switch project…** (with a count of remembered folders) and **Open file…**, over a **Recent projects** list showing each folder's path and how many tabs come back with it. With a project open the heading reads "No files open in <project>" rather than greeting you as a first-time user.
+- **`projects.json`** in the app-data directory, holding all of the above (`src/store/projects.ts`). Documented in `docs/reference/projects-json.md`; up to 20 projects, 20 tabs each. Only paths are stored, never document contents.
 
 ### Changed
-- Nothing yet.
+- **`Open Recent` is now `Open Recent File`** and actually opens the sidebar's Recents tab. It previously opened the *command* palette, which contains no files.
+- **The splash screen stops naming a file that never existed** — its stages now read "reading projects.json…" and "restoring workspace…", over work that really happens. The splash also holds until restore has finished rather than dismissing on a timer alone.
+- **The welcome wizard stands down for anyone who already has a project.** A returning user is not on a first run.
+- **Terminal panel position and size moved into the terminal store**, so they can be restored per project — and so they survive a remount, which the old component-local ref could not.
 
 ### Fixed
-- Nothing yet.
+- **sparkEditor did not run in a browser at all.** `TitleBar`'s title-sync effect called `getCurrentWindow()` unguarded; outside Tauri that throws on `window.__TAURI_INTERNALS__.metadata`, and the optional-call syntax could not catch it, so the whole shell crashed on mount under `npm run dev`. All four window calls are now gated on `isTauri`.
+- **The titlebar close button skipped the unsaved-changes guard.** It called `window.close()` directly, so quitting that way — the ordinary way — bypassed the dirty-buffer prompt entirely. It now routes through the shell like every other close path, which is also what lets the final workspace snapshot be written.
+- **Removed three dead bridge stubs** (`getAppState`, `setAppState`, `windowSetTitle`) that invoked Rust commands which were never implemented. They had no callers; any future one would have failed at runtime.
 
 ---
 

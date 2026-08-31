@@ -63,6 +63,7 @@ import { Button } from "@ui/Button";
 import { LangLogo } from "@ui/LangLogo";
 import "../editor.css";
 import "./CodeEditor.css";
+import { restoreViewState, trackScroll } from "./viewState";
 
 /* ----------------------------------------------------------------
    Per-doc word-wrap preference (module-level ref)
@@ -166,6 +167,7 @@ export function CodeEditor({ docId, onCursor }: Props) {
   const doc = useDocs((s) => s.docs[docId]);
   const setRaw = useDocs((s) => s.setRaw);
   const setCursor = useDocs((s) => s.setCursor);
+  const setScroll = useDocs((s) => s.setScroll);
   const { isDark } = useTheme();
 
   const fontSize = useSettings((s) => s.settings.editor.fontSize);
@@ -178,6 +180,12 @@ export function CodeEditor({ docId, onCursor }: Props) {
      making it a dependency. */
   const initialRef = useRef({ fontSize, tabSize, showLineNumbers, defaultWrap });
   initialRef.current = { fontSize, tabSize, showLineNumbers, defaultWrap };
+
+  /* Persisted caret and scroll for this doc, read through a ref for the
+     same reason: depending on doc.cursor would rebuild the whole view on
+     every keystroke. */
+  const restoreRef = useRef({ cursor: doc?.cursor, scrollTop: doc?.scrollTop });
+  restoreRef.current = { cursor: doc?.cursor, scrollTop: doc?.scrollTop };
 
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoValue, setGotoValue] = useState("");
@@ -270,7 +278,14 @@ export function CodeEditor({ docId, onCursor }: Props) {
     });
     const v = new EditorView({ state, parent: ref.current });
     viewRef.current = v;
+    const cancelRestore = restoreViewState(v, restoreRef.current.cursor, restoreRef.current.scrollTop);
+    const stopTracking = trackScroll(v, (top) => setScroll(docId, top));
     return () => {
+      cancelRestore();
+      stopTracking();
+      // One last read before the view goes: an inactive tab is unmounted,
+      // so this is the only chance to record where it was left.
+      setScroll(docId, Math.round(v.scrollDOM.scrollTop));
       v.destroy();
       viewRef.current = null;
     };
