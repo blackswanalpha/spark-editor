@@ -218,3 +218,53 @@ describe("TerminalView — a program that owns the mouse", () => {
     expect(ptyWrite).not.toHaveBeenCalled();
   });
 });
+
+describe("TerminalView — focus survives a key the engine wants for navigation", () => {
+  beforeEach(() => {
+    ptyWrite.mockClear();
+    frameHandlers.length = 0;
+  });
+  afterEach(cleanup);
+
+  it("takes focus back when Shift+Tab traverses out of the terminal", async () => {
+    /* Reported from the running app: Shift+Tab moved focus to the
+       panel's Restart button. The bytes DO reach the shell — the surface
+       cancels the default — but WebKitGTK traverses anyway, so the
+       keyboard silently left the terminal and the next keystroke went
+       nowhere. */
+    const surface = await mountTerminal();
+    const elsewhere = document.createElement("button");
+    document.body.appendChild(elsewhere);
+
+    press(surface, { key: "Tab", shiftKey: true });
+    expect(ptyWrite).toHaveBeenCalledWith("pty-1", "\x1b[Z");
+
+    // What the engine does next, against the surface's wishes.
+    act(() => {
+      elsewhere.focus();
+      surface.dispatchEvent(new FocusEvent("blur", { bubbles: false }));
+    });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+    });
+    expect(document.activeElement).toBe(surface);
+  });
+
+  it("does not fight a deliberate click away from the terminal", async () => {
+    const surface = await mountTerminal();
+    const elsewhere = document.createElement("button");
+    document.body.appendChild(elsewhere);
+
+    // No key was handled just now, so this blur is the user's own doing.
+    act(() => {
+      elsewhere.focus();
+      surface.dispatchEvent(new FocusEvent("blur", { bubbles: false }));
+    });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+    });
+    expect(document.activeElement).toBe(elsewhere);
+  });
+});
