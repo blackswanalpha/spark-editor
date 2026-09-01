@@ -309,6 +309,57 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     void ptyResize(id, size.rows, size.cols).catch(() => {});
   }, [size.rows, size.cols, status.phase]);
 
+  /* ---------- Holding the keyboard ----------
+
+     Tab and Shift+Tab are focus-navigation keys to the engine before
+     they are anything else, and WebKitGTK traverses on them even when
+     the key press's default is cancelled. The bytes still reach the
+     shell, but the keyboard lands on whatever tab stop is next — in
+     practice the panel's own Restart button — and the keystroke after
+     that goes nowhere.
+
+     `preventDefault` is the correct fix and it is not honoured, so the
+     only remaining lever is the tab order itself: while the shell holds
+     the keyboard, nothing else inside the terminal panel (or the
+     pop-out window) is a tab stop. Everything is restored the moment
+     the surface loses focus, so the controls stay keyboard-reachable
+     whenever you are not typing into a shell. The blur recovery below
+     covers the traversal that escapes the panel entirely.
+  */
+  useEffect(() => {
+    if (!focused) return;
+    const root = screenRef.current?.closest(".term, .term-standalone");
+    if (!(root instanceof HTMLElement)) return;
+
+    const suppressed = new Map<HTMLElement, string | null>();
+
+    const suppress = () => {
+      const candidates = root.querySelectorAll<HTMLElement>(
+        'a[href], button, input, select, textarea, [tabindex]',
+      );
+      for (const el of candidates) {
+        if (el === screenRef.current || suppressed.has(el)) continue;
+        if (el.tabIndex < 0) continue;
+        suppressed.set(el, el.getAttribute("tabindex"));
+        el.setAttribute("tabindex", "-1");
+      }
+    };
+
+    suppress();
+    // Tabs, the scrollback button and the root toggle come and go while
+    // the shell has focus; a new one must not reintroduce a tab stop.
+    const observer = new MutationObserver(suppress);
+    observer.observe(root, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      for (const [el, previous] of suppressed) {
+        if (previous === null) el.removeAttribute("tabindex");
+        else el.setAttribute("tabindex", previous);
+      }
+    };
+  }, [focused]);
+
   /* ---------- Input ----------
 
      `send` sits above the scrolling section because a wheel is input
