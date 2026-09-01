@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import {
   clampWidth,
+  maxWidthFor,
   useSidebarLayout,
   SIDEBAR_COLLAPSE_AT,
   SIDEBAR_DEFAULT,
@@ -136,5 +137,94 @@ describe("useSidebarLayout", () => {
       }
       expect(result.current.width).toBe(SIDEBAR_MAX);
     });
+  });
+});
+
+describe("maxWidthFor", () => {
+  it("never lets the pane crowd the editor out of the window", () => {
+    // 900px window: rail (51) + pane + 320 of editor has to fit.
+    expect(maxWidthFor(900)).toBe(900 - 51 - 320);
+    // A roomy window is limited by the pane's own maximum instead.
+    expect(maxWidthFor(1600)).toBe(SIDEBAR_MAX);
+  });
+
+  it("still returns a usable width on a tiny viewport", () => {
+    expect(maxWidthFor(200)).toBe(SIDEBAR_MIN);
+    expect(maxWidthFor(0)).toBe(SIDEBAR_MAX);
+  });
+});
+
+describe("dragging", () => {
+  // Sibling of the suite above, so it needs its own clean slate: a
+  // persisted width would change what a drag starts from.
+  beforeEach(() => localStorage.clear());
+
+  /** A pointer event shaped like the one the resize handle hands over. */
+  function pointerDown(clientX: number) {
+    const handle = document.createElement("div");
+    document.body.appendChild(handle);
+    handle.setPointerCapture = () => {};
+    handle.releasePointerCapture = () => {};
+    return { clientX, pointerId: 1, currentTarget: handle, preventDefault: () => {} } as unknown as React.PointerEvent;
+  }
+
+  const move = (clientX: number) =>
+    window.dispatchEvent(new MouseEvent("pointermove", { clientX }));
+  const up = () => window.dispatchEvent(new MouseEvent("pointerup", {}));
+
+  const frame = () =>
+    act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+
+  it("moves the pane element without re-rendering, then commits on release", async () => {
+    const { result } = renderHook(() => useSidebarLayout());
+    const pane = document.createElement("aside");
+    document.body.appendChild(pane);
+    result.current.paneRef.current = pane;
+
+    act(() => result.current.startResize(pointerDown(300)));
+    act(() => void move(380));
+    await frame();
+
+    /* The whole point of the change: the element tracks the pointer while
+       React state stays put, so the file tree is not re-rendered sixty
+       times a second and the pane does not lag behind the cursor. */
+    expect(pane.style.width).toBe(`${SIDEBAR_DEFAULT + 80}px`);
+    expect(result.current.width).toBe(SIDEBAR_DEFAULT);
+
+    act(() => void up());
+    expect(result.current.width).toBe(SIDEBAR_DEFAULT + 80);
+    expect(result.current.dragging).toBe(false);
+    // React owns the width again once the drag is over.
+    expect(pane.style.width).toBe("");
+  });
+
+  it("collapses when dragged past the snap threshold", async () => {
+    const { result } = renderHook(() => useSidebarLayout());
+    const pane = document.createElement("aside");
+    result.current.paneRef.current = pane;
+
+    act(() => result.current.startResize(pointerDown(300)));
+    act(() => void move(300 - SIDEBAR_DEFAULT));
+    await frame();
+    expect(result.current.collapsed).toBe(true);
+
+    act(() => void up());
+    // The remembered width survives the collapse.
+    expect(result.current.width).toBe(SIDEBAR_DEFAULT);
+  });
+
+  it("cannot be dragged wider than the window allows", async () => {
+    const { result } = renderHook(() => useSidebarLayout());
+    const pane = document.createElement("aside");
+    result.current.paneRef.current = pane;
+
+    act(() => result.current.startResize(pointerDown(0)));
+    act(() => void move(5000));
+    await frame();
+    act(() => void up());
+
+    expect(result.current.width).toBeLessThanOrEqual(maxWidthFor(window.innerWidth));
   });
 });

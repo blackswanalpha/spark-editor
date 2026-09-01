@@ -19,6 +19,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ---
 
+## [0.7.0] — 2026-09-01
+
+### Added
+- **Terminal selection, in grid coordinates.** Drag to select with a highlight that follows the cell grid, double-click a word (paths and URLs count as one), triple-click a line, or **Select all** from a new right-click menu carrying Copy / Paste / Select all / Clear selection (`src/shell/Terminal/selection.ts`).
+- **Mouse reports for full-screen programs.** Presses, drags and releases are encoded as xterm mouse reports (`encodeMouseButton`) and handed to any program that asked for them, in SGR or either legacy encoding. Holding Shift overrides the program and selects instead, as in every other terminal.
+- **Clipboard bridge** (`src/bridge/clipboard.ts`) that prefers the Tauri clipboard plugin over `navigator.clipboard`, because WebKitGTK ships `writeText` but not `readText`, and falls back to `document.execCommand` where neither exists.
+
+### Changed
+- **Copy is `Ctrl+Shift+C` / `Ctrl+Insert` / the context menu; paste is `Ctrl+V`, `Ctrl+Shift+V`, `Shift+Insert`, middle-click or the menu.** `Ctrl+C` remains SIGINT.
+- **The explorer resize drag no longer goes through React state.** The width is written onto the pane element while the pointer is down and committed once on release — it used to set state every frame, re-rendering the whole shell including the file tree, and write `localStorage` synchronously each time.
+- **Terminal frames are listened to once per window** and fanned out by session id, rather than decoded once per open tab and discarded by an id check.
+- **The frame pump blocks on a condition variable** instead of polling every 8ms for the life of each session.
+
+### Fixed
+- **Copy returned every line run together.** Rows and spans are absolutely positioned, so `window.getSelection().toString()` concatenated them with no separator and dropped the trailing blanks the host trims — three selected lines pasted as one. Text is rebuilt from the painted grid.
+- **Paste was impossible from the keyboard.** `Ctrl+V` encoded `^V` (readline's quoted-insert) *and* called `preventDefault()`, suppressing the webview's own paste; `Ctrl+Shift+V` returned early into nothing.
+- **The clipboard plugin had no permissions.** `clipboard-manager:default` grants none in Tauri v2, so the plugin was installed and unusable. `allow-read-text` and `allow-write-text` are now granted in `src-tauri/capabilities/default.json`.
+- **A click inside a TUI did nothing.** With mouse reporting on the surface declined to select and sent the program nothing, so menus and buttons were unreachable and there was no way to copy out of a full-screen program.
+- **AltGr characters were ESC-prefixed.** X11 and Windows both report AltGr as ctrl+alt, so the `@` on a German layout arrived as `ESC @`. Also: IME composition was forwarded as well as composed (typing every candidate twice), modified function keys sent the unmodified sequence so `Shift+F3` silently did `F3`, and modified `Home`/`End`/`Delete`, `Alt+Enter`, `Alt+Backspace` and astral characters were mis-encoded.
+- **A paste could escape bracketed paste.** An embedded `ESC[201~` ended paste mode early, so the remainder of the clipboard ran as typed input.
+- **Exited sessions leaked.** A shell that ended stayed in the host's table for the life of the window, holding its pty file descriptor, its writer and a vt100 parser with 5000 lines of scrollback; `pty_list` reported shells that no longer ran. Killed children are now reaped on shutdown rather than left as zombies.
+- **The explorer pane resized its boundary but not its contents.** `.sidebar` was pinned to `width: 260px` — the cross axis of a column flex container — so the contents stayed 260px wide wherever the handle was dragged.
+- **"Show explorer" did nothing.** The reveal button sits inside the resize handle, whose pointerdown starts a drag and captures the pointer, retargeting everything after it away from the button.
+- **Long file names ran past the explorer.** Tree rows lacked `min-width: 0`, so as flex items they refused to shrink below their text and pushed out of the pane instead of ellipsising. Indent is now capped against the row's own width, and the header wraps instead of crushing the folder name.
+- **The pane could be dragged over the editor.** The clamp knew only `SIDEBAR_MAX`, not the window; `maxWidthFor` now reserves the plugin rail and 320px of editor.
+- **The terminal took focus back** when the engine traverses away on `Tab`/`Shift+Tab` despite the key press's default being cancelled.
+
+---
+
 ## [0.6.0] — 2026-08-31
 
 ### Added

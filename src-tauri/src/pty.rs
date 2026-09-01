@@ -17,11 +17,11 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::HostError;
 
@@ -218,10 +218,40 @@ struct Session {
     /// Set once the reader thread has seen EOF or `kill` was called;
     /// the reader loop and the frame pump both use it to stop.
     closed: Arc<AtomicBool>,
+    /// "The parser moved, someone should paint." The reader sets it and
+    /// notifies; the frame pump blocks on it. See `spawn_reader`.
+    dirty: Arc<Signal>,
     /// Last grid we serialised, used to emit only changed rows.
     last_rows: Mutex<Vec<String>>,
     seq: AtomicU64,
     size: Mutex<(u16, u16)>,
+}
+
+/// A flag with a condition variable, so the frame pump can sleep until
+/// there is something to do instead of polling.
+#[derive(Default)]
+struct Signal {
+    flag: Mutex<bool>,
+    cv: Condvar,
+}
+
+impl Signal {
+    fn raise(&self) {
+        if let Ok(mut f) = self.flag.lock() {
+            *f = true;
+        }
+        // Notified even if the lock was poisoned: a pump waiting on a
+        // timeout still wakes, and a missed wake is a stalled terminal.
+        self.cv.notify_all();
+    }
+
+    /// Clear the flag and report whether it had been raised.
+    fn take(&self) -> bool {
+        match self.flag.lock() {
+            Ok(mut f) => std::mem::replace(&mut *f, false),
+            Err(_) => true,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -711,6 +741,7 @@ pub fn pty_spawn(
         master: Mutex::new(pair.master),
         child: Mutex::new(child),
         closed: Arc::new(AtomicBool::new(false)),
+        dirty: Arc::new(Signal::default()),
         last_rows: Mutex::new(vec![String::new(); rows as usize]),
         seq: AtomicU64::new(0),
         size: Mutex::new((rows, cols)),
@@ -734,34 +765,64 @@ pub fn pty_spawn(
     })
 }
 
+/// How long a burst of output is allowed to accumulate before it is
+/// painted. Long enough to coalesce a `cat` of a large file into a few
+/// frames, short enough that a keystroke echoes immediately.
 const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(8);
+
+/// Backstop for the pump's condvar wait. Nothing depends on it — the
+/// reader notifies — but a wait that can never time out would hang the
+/// thread forever if a notify were ever missed.
+const PUMP_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// Read PTY output on a dedicated thread and feed the parser.
 ///
-/// Painting is left to a companion thread that wakes every ~8ms and
-/// emits a frame if the parser moved. Rate limiting from inside the read
-/// loop cannot work: the loop blocks in `read`, so the last chunk of a
-/// burst — the one that arrives less than 8ms after the previous emit —
-/// would sit unpainted until the program happened to write again. That
-/// is a shell whose output stops halfway through and only completes when
-/// you press a key.
+/// Painting is left to a companion thread. Rate limiting from inside the
+/// read loop cannot work: the loop blocks in `read`, so the last chunk of
+/// a burst — the one that arrives less than 8ms after the previous emit —
+/// would sit unpainted until the program happened to write again. That is
+/// a shell whose output stops halfway through and only completes when you
+/// press a key.
+///
+/// The pump BLOCKS on a condvar rather than polling. It used to wake
+/// every 8ms for the life of the session, which is 125 wakeups a second
+/// per open tab whether or not anything had happened — four idle
+/// terminals kept the CPU out of its sleep states all day for nothing.
 fn spawn_reader(app: AppHandle, session: Arc<Session>, mut reader: Box<dyn Read + Send>) {
     let closed = session.closed.clone();
-    let dirty = Arc::new(AtomicBool::new(false));
+    let dirty = session.dirty.clone();
 
     {
         let app = app.clone();
         let session = session.clone();
         let closed = closed.clone();
         let dirty = dirty.clone();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(FRAME_INTERVAL);
-            if dirty.swap(false, Ordering::SeqCst) {
+        std::thread::spawn(move || {
+            loop {
+                // Sleep until the reader says the parser moved, or the
+                // session ends. The timeout is only a safety net.
+                let woke = {
+                    let Ok(mut flag) = dirty.flag.lock() else { break };
+                    while !*flag && !closed.load(Ordering::SeqCst) {
+                        let Ok((next, _)) = dirty.cv.wait_timeout(flag, PUMP_IDLE_TIMEOUT) else {
+                            return;
+                        };
+                        flag = next;
+                    }
+                    std::mem::replace(&mut *flag, false)
+                };
+
+                if !woke {
+                    // Woken by the close, with nothing pending: the
+                    // reader's final flush has already happened.
+                    break;
+                }
+
+                // Let the rest of the burst land in the parser, then take
+                // everything that arrived during the wait in one frame.
+                std::thread::sleep(FRAME_INTERVAL);
+                dirty.take();
                 emit_frame(&app, &session, false);
-            } else if closed.load(Ordering::SeqCst) {
-                // Nothing pending and the shell is gone: the last flush
-                // has already happened, so this thread has no more work.
-                break;
             }
         });
     }
@@ -778,8 +839,8 @@ fn spawn_reader(app: AppHandle, session: Arc<Session>, mut reader: Box<dyn Read 
                 Ok(n) => {
                     if let Ok(mut parser) = session.parser.lock() {
                         parser.process(&buf[..n]);
-                        dirty.store(true, Ordering::SeqCst);
                     }
+                    dirty.raise();
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(_) => break,
@@ -787,10 +848,13 @@ fn spawn_reader(app: AppHandle, session: Arc<Session>, mut reader: Box<dyn Read 
         }
 
         // Flush whatever the last burst produced before announcing exit.
-        if dirty.swap(false, Ordering::SeqCst) {
+        if dirty.take() {
             emit_frame(&app, &session, false);
         }
         closed.store(true, Ordering::SeqCst);
+        // Wake the pump so it sees `closed` and stops, rather than
+        // sitting out its timeout.
+        dirty.raise();
 
         let code = session
             .child
@@ -799,6 +863,25 @@ fn spawn_reader(app: AppHandle, session: Arc<Session>, mut reader: Box<dyn Read 
             .and_then(|mut c| c.wait().ok())
             .map(|s| s.exit_code() as i32)
             .unwrap_or(-1);
+
+        /* Drop the session from the manager now that it is over.
+           Without this a shell you exited stayed in the table for the
+           life of the window, holding its master pty fd, its writer and
+           a vt100 parser with 5000 lines of scrollback — a leak that
+           grew every time someone typed `exit` and left the tab open,
+           and that made `pty_list` report shells that no longer ran. */
+        if let Some(manager) = app.try_state::<PtyManager>() {
+            if let Ok(mut sessions) = manager.sessions.lock() {
+                // Only if it is still the same session: an id is never
+                // reused, so this can only remove what just ended.
+                if sessions
+                    .get(&session.id)
+                    .is_some_and(|s| Arc::ptr_eq(s, &session))
+                {
+                    sessions.remove(&session.id);
+                }
+            }
+        }
 
         let _ = app.emit(
             "pty://exit",
@@ -938,6 +1021,9 @@ pub fn pty_kill(manager: tauri::State<'_, PtyManager>, id: String) -> Result<(),
         return Ok(()); // already gone — killing twice is not an error
     };
     session.closed.store(true, Ordering::SeqCst);
+    // Wake the frame pump so it retires now instead of waiting out its
+    // timeout on a session nobody is looking at any more.
+    session.dirty.raise();
     if let Ok(mut child) = session.child.lock() {
         let _ = child.kill();
         let _ = child.wait();
@@ -975,8 +1061,13 @@ pub fn shutdown_all(manager: &PtyManager) {
     };
     for session in sessions {
         session.closed.store(true, Ordering::SeqCst);
+        session.dirty.raise();
         if let Ok(mut child) = session.child.lock() {
             let _ = child.kill();
+            // Reap it. A killed child that is never waited on stays a
+            // zombie for as long as this process lives, and on a slow
+            // shutdown that is long enough to notice in `ps`.
+            let _ = child.wait();
         }
     }
 }

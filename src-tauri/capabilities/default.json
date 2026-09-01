@@ -31,6 +31,8 @@
     "store:default",
     "os:default",
     "clipboard-manager:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     "process:default",
     "log:default",
     "updater:default",

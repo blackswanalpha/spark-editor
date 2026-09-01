@@ -147,23 +147,101 @@ async function subscribe<T>(event: string, handler: (payload: T) => void): Promi
   }
 }
 
-/**
- * Frames carrying changed rows. `pty://cursor` delivers the cheaper
- * cursor-only updates; both are handed to the same handler because the
- * renderer applies them identically.
- */
-export async function onPtyFrame(handler: (f: PtyFrame) => void): Promise<UnlistenFn> {
-  const [a, b] = await Promise.all([
-    subscribe<PtyFrame>("pty://frame", handler),
-    subscribe<PtyFrame>("pty://cursor", handler),
-  ]);
-  return () => {
-    a();
-    b();
-  };
+/* ---------- Fan-out ----------
+
+   The host broadcasts one event per frame to the window, not one per
+   subscriber, but every `listen` call deserialises that payload again on
+   its own. With four tabs open and a ~125Hz frame pump that is four
+   decodes of the same grid 125 times a second, three of which are thrown
+   away by an id check. So each event is listened to ONCE per window and
+   dispatched from a table keyed by session id.
+
+   The listener is torn down when the last subscriber leaves, which is
+   what keeps a closed terminal panel from holding an IPC channel open.
+*/
+
+class Fanout<T extends { id: string }> {
+  private readonly handlers = new Map<string, Set<(p: T) => void>>();
+  private unlisten: UnlistenFn | null = null;
+  private starting: Promise<void> | null = null;
+  /** Bumped whenever the listener is torn down, so an attach that is
+      still in flight knows it has been superseded. */
+  private generation = 0;
+
+  constructor(private readonly events: string[]) {}
+
+  async add(id: string, handler: (p: T) => void): Promise<UnlistenFn> {
+    let set = this.handlers.get(id);
+    if (!set) {
+      set = new Set();
+      this.handlers.set(id, set);
+    }
+    set.add(handler);
+    await this.start();
+    return () => this.remove(id, handler);
+  }
+
+  private remove(id: string, handler: (p: T) => void) {
+    const set = this.handlers.get(id);
+    if (!set) return;
+    set.delete(handler);
+    if (set.size === 0) this.handlers.delete(id);
+    if (this.handlers.size === 0) {
+      this.generation += 1;
+      this.unlisten?.();
+      this.unlisten = null;
+      this.starting = null;
+    }
+  }
+
+  private start(): Promise<void> {
+    if (this.starting) return this.starting;
+
+    /* The generation is what keeps a fast unsubscribe/resubscribe from
+       leaking a listener: without it, an attach still in flight when the
+       last subscriber left would resolve after the NEXT one arrived, see
+       a non-empty table, and overwrite `unlisten` — orphaning its own
+       pair of listeners for the life of the window. */
+    const gen = (this.generation += 1);
+
+    this.starting = (async () => {
+      const stops = await Promise.all(
+        this.events.map((e) =>
+          subscribe<T>(e, (payload) => {
+            // Copy before iterating: a handler may unsubscribe itself.
+            const set = this.handlers.get(payload?.id);
+            if (!set) return;
+            for (const fn of [...set]) fn(payload);
+          }),
+        ),
+      );
+      // Superseded, or everything unsubscribed while we were attaching.
+      if (gen !== this.generation || this.handlers.size === 0) {
+        for (const stop of stops) stop();
+        return;
+      }
+      this.unlisten = () => stops.forEach((stop) => stop());
+    })();
+    return this.starting;
+  }
 }
 
-export const onPtyExit = (handler: (e: PtyExit) => void) => subscribe<PtyExit>("pty://exit", handler);
+const frames = new Fanout<PtyFrame>(["pty://frame", "pty://cursor"]);
+const exits = new Fanout<PtyExit>(["pty://exit"]);
+
+/**
+ * Frames for one session. `pty://cursor` delivers the cheaper cursor-only
+ * updates; both are handed to the same handler because the renderer
+ * applies them identically.
+ *
+ * Subscribing by id rather than filtering in the handler is what lets the
+ * fan-out above decode each frame once no matter how many tabs are open.
+ */
+export const onPtyFrame = (id: string, handler: (f: PtyFrame) => void): Promise<UnlistenFn> =>
+  frames.add(id, handler);
+
+export const onPtyExit = (id: string, handler: (e: PtyExit) => void): Promise<UnlistenFn> =>
+  exits.add(id, handler);
 
 /* ---------- Key encoding ----------
 
@@ -203,12 +281,55 @@ export interface KeyContext {
   applicationCursor: boolean;
 }
 
+/** xterm's modifier parameter: 1 + shift(1) + alt(2) + ctrl(4). */
+function modifier(e: Pick<KeyboardEvent, "shiftKey" | "altKey" | "ctrlKey">): number {
+  return 1 + (e.shiftKey ? 1 : 0) + (e.altKey ? 2 : 0) + (e.ctrlKey ? 4 : 0);
+}
+
+/**
+ * Whether this key press is one of the clipboard bindings the surface
+ * handles itself, so it must never reach the tty.
+ *
+ * Ctrl+Shift+C/V are the terminal conventions (Ctrl+C has to stay
+ * SIGINT); Ctrl+Insert / Shift+Insert are the X11 ones, which is what a
+ * lot of muscle memory on Linux actually uses.
+ */
+export type ClipboardIntent = "copy" | "paste" | null;
+
+export function clipboardIntent(
+  e: Pick<KeyboardEvent, "key" | "ctrlKey" | "shiftKey" | "altKey" | "metaKey">,
+): ClipboardIntent {
+  if (e.altKey || e.metaKey) return null;
+  const key = e.key;
+  if (e.ctrlKey && e.shiftKey) {
+    if (key === "C" || key === "c") return "copy";
+    if (key === "V" || key === "v") return "paste";
+  }
+  // Plain Ctrl+V: a terminal's ^V is readline's quoted-insert, which
+  // almost nobody reaches for deliberately and everybody hits expecting a
+  // paste. The shell keeps ^Q for the same job.
+  if (e.ctrlKey && !e.shiftKey && (key === "V" || key === "v")) return "paste";
+  if (key === "Insert") {
+    if (e.ctrlKey && !e.shiftKey) return "copy";
+    if (e.shiftKey && !e.ctrlKey) return "paste";
+  }
+  return null;
+}
+
 /**
  * Encode a key press as terminal input, or return `null` when the key
  * carries no bytes (a bare modifier, or a shortcut the UI handles).
  */
 export function encodeKey(e: KeyboardEvent, ctx: KeyContext): string | null {
   const { key, ctrlKey, altKey, metaKey, shiftKey } = e;
+
+  /* An IME is mid-composition: the characters it is assembling arrive
+     later as one `input`/composition result, and forwarding the raw keys
+     as well types every candidate twice. `keyCode === 229` is the older
+     signal for the same thing, and WebKitGTK still uses it. */
+  if (e.isComposing || key === "Process" || key === "Unidentified" || e.keyCode === 229) {
+    return null;
+  }
 
   // Bare modifiers produce nothing.
   if (key === "Shift" || key === "Control" || key === "Alt" || key === "Meta" || key === "CapsLock") {
@@ -218,35 +339,52 @@ export function encodeKey(e: KeyboardEvent, ctx: KeyContext): string | null {
   // Cmd/Super shortcuts belong to the app (copy, paste, close), never the tty.
   if (metaKey) return null;
 
+  // Clipboard bindings are the surface's, not the shell's.
+  if (clipboardIntent(e)) return null;
+
   const arrow = ARROWS[key];
   if (arrow) {
     if (ctrlKey || altKey || shiftKey) {
       // xterm's modifyOtherKeys form: CSI 1 ; <mod> <final>
-      const mod = 1 + (shiftKey ? 1 : 0) + (altKey ? 2 : 0) + (ctrlKey ? 4 : 0);
-      return `${CSI}1;${mod}${arrow}`;
+      return `${CSI}1;${modifier(e)}${arrow}`;
     }
     return ctx.applicationCursor ? `${SS3}${arrow}` : `${CSI}${arrow}`;
   }
 
-  if (FN_KEYS[key]) return FN_KEYS[key];
+  const fn = FN_KEYS[key];
+  if (fn) {
+    if (!ctrlKey && !altKey && !shiftKey) return fn;
+    /* A modified function key carries the modifier as a parameter. The
+       two families are shaped differently: F1-F4 are SS3 sequences and
+       become CSI 1 ; mod <final>, while F5+ are already CSI n ~ and take
+       the modifier as a second parameter. Sending the unmodified form
+       instead — which is what happened before — made Shift+F3 do whatever
+       F3 does, silently. */
+    const mod = modifier(e);
+    if (fn.startsWith(SS3)) return `${CSI}1;${mod}${fn.slice(SS3.length)}`;
+    return `${fn.slice(0, -1)};${mod}~`;
+  }
 
   switch (key) {
     case "Enter":
-      return "\r";
+      // Alt+Enter is ESC CR, the same meta convention as Alt+<char>.
+      return altKey ? "\x1b\r" : "\r";
     case "Tab":
       return shiftKey ? `${CSI}Z` : "\t";
     case "Backspace":
-      // ctrl+backspace deletes the previous word (readline's ESC DEL).
-      return ctrlKey ? "\x1b\x7f" : "\x7f";
+      // ctrl/alt+backspace deletes the previous word (readline's ESC DEL).
+      return ctrlKey || altKey ? "\x1b\x7f" : "\x7f";
     case "Escape":
       return "\x1b";
     case "Delete":
-      return `${CSI}3~`;
+      return ctrlKey || altKey || shiftKey ? `${CSI}3;${modifier(e)}~` : `${CSI}3~`;
     case "Insert":
       return `${CSI}2~`;
     case "Home":
+      if (ctrlKey || altKey || shiftKey) return `${CSI}1;${modifier(e)}H`;
       return ctx.applicationCursor ? `${SS3}H` : `${CSI}H`;
     case "End":
+      if (ctrlKey || altKey || shiftKey) return `${CSI}1;${modifier(e)}F`;
       return ctx.applicationCursor ? `${SS3}F` : `${CSI}F`;
     case "PageUp":
       return `${CSI}5~`;
@@ -255,6 +393,13 @@ export function encodeKey(e: KeyboardEvent, ctx: KeyContext): string | null {
     default:
       break;
   }
+
+  /* AltGr. X11 and Windows both report it as ctrl+alt, so the two checks
+     below would have turned the `@` on a German layout — or the `#` on a
+     UK one — into `ESC @`. A ctrl+alt press that still produced a
+     printable character IS that character: no real Ctrl+Alt binding
+     yields one. */
+  if (ctrlKey && altKey && key.length === 1) return key;
 
   // Ctrl+<letter> and the ctrl punctuation range.
   if (ctrlKey && !altKey && key.length === 1) {
@@ -269,7 +414,10 @@ export function encodeKey(e: KeyboardEvent, ctx: KeyContext): string | null {
       "]": "\x1d",
       "^": "\x1e",
       _: "\x1f",
+      "-": "\x1f",
+      "/": "\x1f",
       " ": "\x00",
+      "2": "\x00",
       "?": "\x7f",
     };
     if (punct[key]) return punct[key];
@@ -279,16 +427,66 @@ export function encodeKey(e: KeyboardEvent, ctx: KeyContext): string | null {
   // Alt+<char> is ESC-prefixed (readline's meta).
   if (altKey && key.length === 1) return `\x1b${key}`;
 
-  // Any single printable character.
-  if (key.length === 1) return key;
-
-  return null;
+  /* Whatever is left is either a named key or a printable character. The
+     DOM spec names every non-character key with a capitalised identifier
+     ("Enter", "F13", "AudioVolumeUp"), so anything that is not shaped
+     like one is text to type — which is how a dead-key composition or an
+     emoji (two UTF-16 units, so `length === 1` misses it) gets through. */
+  if (/^[A-Z][A-Za-z0-9]+$/.test(key)) return null;
+  return key;
 }
 
 /** Arrow-key bytes, for translating a wheel where there is no scrollback. */
 export function encodeArrow(dir: "up" | "down", applicationCursor: boolean): string {
   const final = dir === "up" ? "A" : "B";
   return applicationCursor ? `${SS3}${final}` : `${CSI}${final}`;
+}
+
+/** A mouse button press, drag or release, for a program that asked. */
+export interface ButtonReport {
+  /** 0 = left, 1 = middle, 2 = right. */
+  button: number;
+  /** 0-based cell under the pointer. */
+  col: number;
+  row: number;
+  kind: "press" | "release" | "motion";
+  shift: boolean;
+  alt: boolean;
+  ctrl: boolean;
+}
+
+/**
+ * Encode a button event as an xterm mouse report.
+ *
+ * Without this a click inside a full-screen program did nothing at all:
+ * the surface declined to select (the program owns the pointer) and had
+ * nothing to hand the program either, so menus and buttons in a TUI were
+ * unreachable with the mouse.
+ *
+ * Legacy encoding has no way to say *which* button was released — every
+ * release is button 3 — which is exactly why SGR exists and why any
+ * program that cares asks for it.
+ */
+export function encodeMouseButton(e: ButtonReport, encoding: PtyMouseEncoding): string {
+  const mods = (e.shift ? 4 : 0) + (e.alt ? 8 : 0) + (e.ctrl ? 16 : 0);
+  const motion = e.kind === "motion" ? 32 : 0;
+  const base = Math.max(0, Math.min(2, e.button));
+  const col = Math.max(0, e.col) + 1;
+  const row = Math.max(0, e.row) + 1;
+
+  if (encoding === "sgr") {
+    // SGR keeps the button on release and marks it with a final `m`.
+    const button = base + mods + motion;
+    return `${CSI}<${button};${col};${row}${e.kind === "release" ? "m" : "M"}`;
+  }
+
+  const button = (e.kind === "release" ? 3 : base) + mods + motion;
+  // See encodeWheelMouse: the legacy forms offset every field by 32 and
+  // this report crosses IPC as UTF-8, so the coordinates are clamped to
+  // stay one byte wide.
+  const cap = encoding === "utf8" ? 2015 : 95;
+  const cell = (v: number) => String.fromCharCode(32 + Math.min(v, cap));
+  return `${CSI}M${String.fromCharCode(32 + button)}${cell(col)}${cell(row)}`;
 }
 
 export interface WheelReport {
@@ -331,6 +529,18 @@ export function encodeWheelMouse(e: WheelReport, encoding: PtyMouseEncoding): st
 export function encodePaste(text: string, bracketed: boolean): string {
   // Normalise line endings: a tty expects CR, and a stray CRLF would
   // submit twice.
-  const normalized = text.replace(/\r\n/g, "\r").replace(/\n/g, "\r");
+  let normalized = text.replace(/\r\n/g, "\r").replace(/\n/g, "\r");
+
+  /* Strip the paste terminator out of the payload. Clipboard content is
+     attacker-controlled often enough (a copied code block on a web page)
+     and an embedded ESC[201~ ends bracketed-paste mode early, so the
+     rest of the text is read as typed input — a paste that runs a
+     command the user never saw. Everything else passes through: a
+     terminal is supposed to carry escape sequences. */
+  // Split/join rather than a regex: an escape byte in a character class
+  // is exactly what `no-control-regex` exists to flag, and this says the
+  // same thing without one.
+  if (bracketed) normalized = normalized.split(`${CSI}201~`).join("");
+
   return bracketed ? `${CSI}200~${normalized}${CSI}201~` : normalized;
 }
