@@ -131,8 +131,15 @@ ul.sidebar__list {
   overflow: hidden;
   font-size: var(--size-sm);
 }
+/* The header carries eight fixed controls: two nav arrows and six
+   actions, 22px each. That is about 208px of chrome before the folder
+   name gets a single pixel — more than the pane's own minimum width of
+   180px — so at any narrow size the name was crushed to "PLAN…" while
+   the row itself overflowed. Wrapping is the fix: the actions drop onto
+   their own line rather than squeezing the one thing the header is for.
+   `flex-basis` on the nav is the threshold at which that happens. */
 .explorer__header {
-  display: flex; align-items: center; gap: var(--sp-1);
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1);
   padding: var(--sp-2) var(--sp-2) var(--sp-1);
   font-size: var(--size-xs);
   font-weight: 600;
@@ -140,11 +147,15 @@ ul.sidebar__list {
   text-transform: uppercase;
   color: var(--text-muted);
   user-select: none;
+  min-width: 0;
+  overflow: hidden;
 }
 .explorer__nav {
   display: inline-flex; align-items: center; gap: 2px;
   min-width: 0;
-  flex: 1;
+  /* Keep at least this much for the folder name; below it the actions
+     wrap instead of eating into it. */
+  flex: 1 1 140px;
 }
 .explorer__title {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -152,7 +163,14 @@ ul.sidebar__list {
   min-width: 0;
   margin-left: 2px;
 }
-.explorer__actions { margin-left: auto; display: flex; gap: 2px; flex: none; }
+.explorer__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+  /* Never shrink below the buttons' own size — a half-clipped icon row
+     is worse than a second line. */
+  flex: 0 0 auto;
+}
 .explorer__actions .icon-btn { width: 22px; height: 22px; }
 .explorer__nav .icon-btn { width: 22px; height: 22px; }
 .explorer__nav .icon-btn:disabled { opacity: 0.35; cursor: default; }
@@ -257,14 +275,27 @@ ul.sidebar__list {
   color: var(--text);
   user-select: none;
   border-radius: var(--radius-sm);
+  min-width: 0;
+  overflow: hidden;
 }
 .tree-root[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
 .tree-root:focus-visible { box-shadow: var(--focus-ring); }
-.tree-root__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* `min-width: 0` is what actually makes the ellipsis work: a flex item
+   defaults to `min-width: auto`, so it refuses to shrink below its text
+   and pushes the row wider than the pane instead of truncating. */
+.tree-root__name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
 
 .tree-item {
   display: flex; align-items: center; gap: var(--sp-1);
   width: 100%;
+  min-width: 0;
+  /* The row is exactly the pane's width; anything that still does not
+     fit is clipped here rather than escaping into the layout. */
+  overflow: hidden;
   padding: 3px 6px;
   border: none;
   border-radius: var(--radius-sm);
@@ -289,9 +320,16 @@ ul.sidebar__list {
 }
 .tree-item[data-dir="true"][aria-expanded="true"] .tree-item__chev { transform: rotate(90deg); }
 .tree-item[data-dir="false"] .tree-item__chev { visibility: hidden; }
-.tree-item__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-item__name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* See .tree-root__name — without this the name sets the row's minimum
+     width and a long file name runs past the edge of the explorer. */
+  min-width: 0;
+  flex: 1;
+}
 .tree-item--hidden .tree-item__name { color: var(--text-muted); font-style: italic; }
 
+.tree-group { min-width: 0; }
 .tree-group[hidden] { display: none; }
 .tree-empty { padding: var(--sp-2); color: var(--text-muted); font-size: var(--size-sm); }
 

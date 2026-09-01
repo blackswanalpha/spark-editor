@@ -27,12 +27,24 @@
   font-kerning: none;
   font-feature-settings: "liga" 0, "calt" 0;
   cursor: text;
-  /* Selection must work for copy, so no user-select:none here. */
+  /* The browser's own selection is switched off deliberately. Rows and
+     spans are absolutely positioned, so a native selection produced text
+     with no line breaks and a highlight that jumped between rows.
+     Selection is modelled in grid coordinates instead (selection.ts) and
+     painted by .tv__selection below. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.tv__screen ::selection,
-.tv__screen::selection {
+/* Highlight for the grid selection. It sits ON TOP of the text rather
+   than behind it, because a cell can carry its own background and an
+   underlay would simply not be visible there. The token is translucent,
+   so the character stays readable through it. */
+.tv__selection {
+  position: absolute;
   background: var(--term-selection);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .tv__row {

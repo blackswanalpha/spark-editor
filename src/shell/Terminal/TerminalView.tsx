@@ -2,11 +2,13 @@
    sparkEditor · src/shell/Terminal/TerminalView.tsx
 
    The terminal surface. A real shell runs in the Rust host; this
-   component owns three jobs and nothing else:
+   component owns four jobs and nothing else:
 
      1. Size — measure the box, convert to rows/cols, tell the host.
      2. Paint — apply row deltas from `pty://frame` into a grid.
      3. Input — encode key/paste events and post them to the pty.
+     4. Select — track a selection in grid coordinates so copy has
+        something correct to copy.
 
    There is no terminal emulator here. The host already resolved
    every cell's text and colour, so painting is a list of styled
@@ -14,6 +16,7 @@
    ============================================================ */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  clipboardIntent,
   encodeArrow,
   encodeKey,
   encodePaste,
@@ -21,6 +24,7 @@ import {
   onPtyExit,
   onPtyFrame,
   ptyKill,
+  ptyList,
   ptyRefresh,
   ptyResize,
   ptyScroll,
@@ -33,9 +37,21 @@ import {
   type PtyPrivilege,
   type PtySpan,
 } from "@bridge/pty";
+import { readClipboardText, writeClipboardText } from "@bridge/clipboard";
+import { ContextMenu, type ContextMenuEntry } from "@ui/ContextMenu";
 import { useSettings } from "@store/settings";
 import { useCellMetrics } from "./useCellMetrics";
 import { applyFrame as reduceFrame, emptyGrid, isFresh, type Grid } from "./grid";
+import {
+  isEmpty as selectionIsEmpty,
+  lineAt,
+  pointFromPixels,
+  rowSegments,
+  selectAll,
+  selectionText,
+  wordAt,
+  type Selection,
+} from "./selection";
 import {
   offsetForThumbFraction,
   scrollIntentForKey,
@@ -46,6 +62,8 @@ import "./TerminalView.css";
 
 const FONT_FAMILY = '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace';
 const PADDING = 8;
+/** Two clicks closer together than this widen the selection to a word. */
+const MULTI_CLICK_MS = 400;
 
 export type TerminalStatus =
   | { phase: "starting" }
@@ -85,6 +103,7 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
   const [focused, setFocused] = useState(false);
   const [scrolledBack, setScrolledBack] = useState(0);
   const [scrollMax, setScrollMax] = useState(0);
+  const [selection, setSelection] = useState<Selection | null>(null);
 
   const sessionRef = useRef<string | null>(null);
   const modesRef = useRef({
@@ -156,6 +175,33 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     return () => ro.disconnect();
   }, [recomputeSize]);
 
+  /* ---------- Frame application ----------
+
+     Declared above the session effect because that effect subscribes
+     with it; `useCallback([])` keeps one identity for the component's
+     life, so the subscription never has to be rebuilt.
+  */
+
+  const applyFrame = useCallback((frame: PtyFrame) => {
+    if (!isFresh(frame, seqRef.current)) return;
+    seqRef.current = frame.seq;
+
+    modesRef.current = {
+      applicationCursor: frame.applicationCursor,
+      bracketedPaste: frame.bracketedPaste,
+      alternateScreen: frame.alternateScreen ?? false,
+      mouseMode: frame.mouseMode ?? "none",
+      mouseEncoding: frame.mouseEncoding ?? "default",
+    };
+    setCursor({ row: frame.cursorRow, col: frame.cursorCol, visible: frame.cursorVisible });
+    setScrolledBack(frame.scrollback);
+    // A host that predates `scrollbackMax` (a dev build mid-rebuild)
+    // would otherwise poison the scrollbar geometry with NaN.
+    setScrollMax(Number.isFinite(frame.scrollbackMax) ? frame.scrollbackMax : 0);
+    onTitleRef.current?.(frame.title ?? null);
+    setGrid((prev) => reduceFrame(prev, frame));
+  }, []);
+
   /* ---------- Session lifecycle ----------
 
      One effect owns the whole session: spawn, subscribe, and on
@@ -173,31 +219,12 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     setGrid(emptyGrid(size.rows));
     setScrolledBack(0);
     setScrollMax(0);
+    setSelection(null);
     scrollRef.current = { pending: 0, absolute: null, busy: false };
     publishStatus({ phase: "starting" });
 
     (async () => {
       try {
-        // Subscribe before spawning so the shell's first prompt — which
-        // can arrive before `ptySpawn` resolves — is never dropped.
-        const [uf, ue] = await Promise.all([
-          onPtyFrame((frame) => {
-            if (disposed || frame.id !== sessionRef.current) return;
-            applyFrame(frame);
-          }),
-          onPtyExit((e) => {
-            if (disposed || e.id !== sessionRef.current) return;
-            publishStatus({ phase: "exited", code: e.code, message: e.message });
-          }),
-        ]);
-        if (disposed) {
-          uf();
-          ue();
-          return;
-        }
-        unlistenFrame = uf;
-        unlistenExit = ue;
-
         const session = await ptySpawn({
           cwd,
           rows: size.rows,
@@ -211,15 +238,37 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
         spawnedId = session.id;
         sessionRef.current = session.id;
         sentSizeRef.current = { rows: session.rows, cols: session.cols };
-        publishStatus({ phase: "running", shell: session.shell, privilege: session.privilege });
 
-        // Subscribing early is not enough on its own: frames that arrive
-        // before `ptySpawn` resolves carry an id this side does not know
-        // yet, so the handler discards them. Everything after that is a
-        // delta against rows the host already considers painted, which
-        // would leave the first prompt missing until something else
-        // rewrote its row. One full repaint closes that window.
+        /* Events are keyed by session id, so they can only be subscribed
+           to once the spawn has answered with one. Frames the shell
+           produced in between are not lost: they are deltas against rows
+           the host considers painted, and the refresh below asks for the
+           whole screen again. */
+        const [uf, ue] = await Promise.all([
+          onPtyFrame(session.id, applyFrame),
+          onPtyExit(session.id, (e) =>
+            publishStatus({ phase: "exited", code: e.code, message: e.message }),
+          ),
+        ]);
+        if (disposed) {
+          uf();
+          ue();
+          void ptyKill(session.id).catch(() => {});
+          return;
+        }
+        unlistenFrame = uf;
+        unlistenExit = ue;
+        publishStatus({ phase: "running", shell: session.shell, privilege: session.privilege });
         void ptyRefresh(session.id).catch(() => {});
+
+        /* A shell that died before the listener attached — a bad login
+           shell, a pkexec the user cancelled — would otherwise sit on
+           "running" forever with a blank screen. The host drops a session
+           from its table when it ends, so absence is the signal. */
+        const live = await ptyList().catch(() => null);
+        if (!disposed && live && !live.some((s) => s.id === session.id)) {
+          publishStatus({ phase: "exited", code: 0 });
+        }
       } catch (err) {
         if (disposed) return;
         const message =
@@ -242,29 +291,7 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     };
     // Size is read at spawn time only; later changes go through pty_resize.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cwd, privilege, restartKey, publishStatus]);
-
-  /* ---------- Frame application ---------- */
-
-  const applyFrame = useCallback((frame: PtyFrame) => {
-    if (!isFresh(frame, seqRef.current)) return;
-    seqRef.current = frame.seq;
-
-    modesRef.current = {
-      applicationCursor: frame.applicationCursor,
-      bracketedPaste: frame.bracketedPaste,
-      alternateScreen: frame.alternateScreen ?? false,
-      mouseMode: frame.mouseMode ?? "none",
-      mouseEncoding: frame.mouseEncoding ?? "default",
-    };
-    setCursor({ row: frame.cursorRow, col: frame.cursorCol, visible: frame.cursorVisible });
-    setScrolledBack(frame.scrollback);
-    // A host that predates `scrollbackMax` (a dev build mid-rebuild)
-    // would otherwise poison the scrollbar geometry with NaN.
-    setScrollMax(Number.isFinite(frame.scrollbackMax) ? frame.scrollbackMax : 0);
-    onTitleRef.current?.(frame.title ?? null);
-    setGrid((prev) => reduceFrame(prev, frame));
-  }, []);
+  }, [cwd, privilege, restartKey, publishStatus, applyFrame]);
 
   /* ---------- Push size changes to the host ---------- */
 
@@ -273,6 +300,9 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     if (!id || status.phase !== "running") return;
     if (sentSizeRef.current.rows === size.rows && sentSizeRef.current.cols === size.cols) return;
     sentSizeRef.current = { rows: size.rows, cols: size.cols };
+    // Reflow moves every cell; a selection in grid coordinates no longer
+    // covers the text it was taken from.
+    setSelection(null);
     void ptyResize(id, size.rows, size.cols).catch(() => {});
   }, [size.rows, size.cols, status.phase]);
 
@@ -286,6 +316,26 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     if (!id) return;
     void ptyWrite(id, data).catch(() => {});
   }, []);
+
+  /* ---------- Clipboard ----------
+
+     Copy reads the grid, not the DOM. The screen is a stack of
+     absolutely positioned spans, so `window.getSelection().toString()`
+     returns every row run together with no line breaks — three copied
+     lines arrived as one. `selectionText` rebuilds them from the same
+     rows that were painted. */
+
+  const copySelection = useCallback(async () => {
+    const text = selectionText(grid, selection, size.cols);
+    if (!text) return false;
+    return writeClipboardText(text);
+  }, [grid, selection, size.cols]);
+
+  const pasteClipboard = useCallback(async () => {
+    if (!sessionRef.current) return;
+    const text = await readClipboardText();
+    if (text) send(encodePaste(text, modesRef.current.bracketedPaste));
+  }, [send]);
 
   /* ---------- Viewport scrolling ----------
 
@@ -341,6 +391,9 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
   const scrollBy = useCallback(
     (rows: number) => {
       if (!Number.isFinite(rows) || rows === 0) return;
+      // The viewport is about to show different rows; a selection keyed
+      // to the old ones would highlight the wrong text.
+      setSelection(null);
       scrollRef.current.pending += rows;
       pumpScroll();
     },
@@ -350,6 +403,7 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
   const scrollTo = useCallback(
     (offset: number) => {
       if (!Number.isFinite(offset)) return;
+      setSelection(null);
       scrollRef.current.absolute = Math.max(0, Math.round(offset));
       pumpScroll();
     },
@@ -438,15 +492,119 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     [scrollTo, scrolledBack, scrollMax, size.rows],
   );
 
+  /* ---------- Mouse selection ----------
+
+     Grid coordinates, not DOM ranges: see selection.ts for why. The
+     click counter is kept here rather than read off `event.detail`,
+     which WebKit reports as 0 for pointer events. */
+  const selectingRef = useRef(false);
+  const clickRef = useRef({ time: 0, row: -1, col: -1, count: 0 });
+
+  const pointAt = useCallback(
+    (clientX: number, clientY: number, edge: "round" | "floor" = "round") => {
+      const box = screenRef.current?.getBoundingClientRect();
+      if (!box) return { row: 0, col: 0 };
+      return pointFromPixels(clientX - box.left, clientY - box.top, cell, size, edge);
+    },
+    [cell, size],
+  );
+
+  const onScreenPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      /* Middle click pastes, as it does in every terminal on this
+         platform. It pastes the ordinary clipboard rather than X11's
+         PRIMARY selection, which is what the OS bridge exposes — close
+         enough to the muscle memory to be worth having, and it is the
+         only paste that needs no keyboard at all. */
+      if (e.button === 1) {
+        e.preventDefault();
+        void pasteClipboard();
+        return;
+      }
+      if (e.button !== 0) return;
+
+      /* A program that asked for mouse reporting owns the pointer: a
+         click is a click for it, not a selection for us. Shift is the
+         standard override, which is how you select text inside vim. */
+      if (modesRef.current.mouseMode !== "none" && !e.shiftKey) return;
+
+      e.preventDefault();
+      screenRef.current?.focus({ preventScroll: true });
+
+      const floor = pointAt(e.clientX, e.clientY, "floor");
+      const now = Date.now();
+      const prev = clickRef.current;
+      const repeat =
+        now - prev.time < MULTI_CLICK_MS && prev.row === floor.row && prev.col === floor.col;
+      const count = repeat ? prev.count + 1 : 1;
+      clickRef.current = { time: now, row: floor.row, col: floor.col, count };
+
+      if (count >= 3) {
+        setSelection(lineAt(floor, size.cols));
+        return;
+      }
+      if (count === 2) {
+        setSelection(wordAt(grid, floor, size.cols));
+        return;
+      }
+
+      const at = pointAt(e.clientX, e.clientY);
+      selectingRef.current = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setSelection({ anchor: at, focus: at, mode: "char" });
+    },
+    [pointAt, pasteClipboard, grid, size.cols],
+  );
+
+  const onScreenPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!selectingRef.current) return;
+      const at = pointAt(e.clientX, e.clientY);
+      setSelection((prev) =>
+        prev && prev.focus.row === at.row && prev.focus.col === at.col
+          ? prev
+          : prev && { ...prev, focus: at },
+      );
+    },
+    [pointAt],
+  );
+
+  const endSelecting = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!selectingRef.current) return;
+    selectingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+  }, []);
+
+  /* ---------- Keyboard ---------- */
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (status.phase !== "running") return;
 
-      // Let the app keep its own clipboard shortcuts. Ctrl+Shift+C/V is
-      // the terminal convention precisely because Ctrl+C must reach the
-      // shell as SIGINT.
-      if (e.ctrlKey && e.shiftKey && (e.key === "C" || e.key === "c")) return;
-      if (e.ctrlKey && e.shiftKey && (e.key === "V" || e.key === "v")) return;
+      /* Copy and paste are the surface's, never the shell's — Ctrl+C has
+         to stay SIGINT, which is the whole reason terminals moved copy
+         onto Ctrl+Shift+C and Ctrl+Insert. */
+      const clip = clipboardIntent(e.nativeEvent);
+      if (clip) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (clip === "copy") void copySelection();
+        else void pasteClipboard();
+        return;
+      }
+
+      // Escape drops a selection before it reaches the shell as ESC —
+      // only when there is one, so Escape still works as a key.
+      if (e.key === "Escape" && !selectionIsEmpty(selection, size.cols)) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelection(null);
+        return;
+      }
 
       // Shift+PageUp/PageDown/Home/End move the viewport, not the shell.
       // Bare PageUp still goes to the tty: pagers and editors bind it.
@@ -466,11 +624,28 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
       if (bytes === null) return;
       e.preventDefault();
       e.stopPropagation();
+      // Typing scrolls the host back to the live bottom, so the selection
+      // would be pointing at rows that are no longer on screen.
+      if (selection) setSelection(null);
       send(bytes);
     },
-    [send, status.phase, size.rows, scrollMax, scrollBy, scrollTo],
+    [
+      send,
+      status.phase,
+      size.rows,
+      size.cols,
+      scrollMax,
+      scrollBy,
+      scrollTo,
+      copySelection,
+      pasteClipboard,
+      selection,
+    ],
   );
 
+  /* The webview still delivers a native paste for the platform's own
+     binding (Cmd+V on macOS); routing it through the same encoder keeps
+     bracketed paste correct on that path too. */
   const onPaste = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
       e.preventDefault();
@@ -480,12 +655,41 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     [send],
   );
 
-  /* Copy the selection with Ctrl+Shift+C, the terminal convention. */
-  const onCopyShortcut = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!(e.ctrlKey && e.shiftKey && (e.key === "C" || e.key === "c"))) return;
-    const text = window.getSelection()?.toString() ?? "";
-    if (text) void navigator.clipboard?.writeText(text).catch(() => {});
-  }, []);
+  /* ---------- Context menu ---------- */
+
+  const hasSelection = !selectionIsEmpty(selection, size.cols);
+
+  const menuEntries = useMemo<ContextMenuEntry[]>(
+    () => [
+      { id: "copy", label: "Copy", icon: "copy", shortcut: "Ctrl+Shift+C", disabled: !hasSelection },
+      { id: "paste", label: "Paste", icon: "clipboard", shortcut: "Ctrl+Shift+V" },
+      { id: "sep", separator: true },
+      { id: "selectAll", label: "Select all", icon: "check" },
+      { id: "clear", label: "Clear selection", icon: "close", disabled: !hasSelection },
+    ],
+    [hasSelection],
+  );
+
+  const onMenuSelect = useCallback(
+    (id: string) => {
+      switch (id) {
+        case "copy":
+          void copySelection();
+          break;
+        case "paste":
+          void pasteClipboard();
+          break;
+        case "selectAll":
+          setSelection(selectAll(size.rows, size.cols));
+          break;
+        case "clear":
+          setSelection(null);
+          break;
+      }
+      screenRef.current?.focus({ preventScroll: true });
+    },
+    [copySelection, pasteClipboard, size.rows, size.cols],
+  );
 
   /* ---------- Render ---------- */
 
@@ -505,94 +709,125 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     [scrolledBack, scrollMax, size.rows],
   );
 
-  const showCursor = cursor.visible && focused && status.phase === "running" && scrolledBack === 0;
+  const highlights = useMemo(
+    () => rowSegments(selection, size.cols, size.rows),
+    [selection, size.cols, size.rows],
+  );
+
+  const showCursor =
+    cursor.visible && focused && status.phase === "running" && scrolledBack === 0 && !hasSelection;
 
   return (
-    <div
-      ref={hostRef}
-      className={`tv ${focused ? "is-focused" : ""}`}
-      style={{ padding: PADDING }}
-      onWheel={onWheel}
-      onPointerDown={(e) => {
-        // The grid does not fill the box: there is padding around it, and
-        // short rows leave the right-hand side empty. Clicking any of that
-        // must still put the keyboard on the terminal.
-        if (e.target === e.currentTarget) screenRef.current?.focus({ preventScroll: true });
-      }}
-    >
+    <ContextMenu entries={menuEntries} onSelect={onMenuSelect}>
       <div
-        ref={screenRef}
-        className="tv__screen"
-        style={gridStyle}
-        tabIndex={0}
-        role="textbox"
-        aria-multiline="true"
-        aria-label="Terminal"
-        onKeyDown={(e) => {
-          onCopyShortcut(e);
-          onKeyDown(e);
+        ref={hostRef}
+        className={`tv ${focused ? "is-focused" : ""}`}
+        style={{ padding: PADDING }}
+        /* The host takes focus only to hand it straight on. Radix returns
+           focus to its trigger — this element — when the context menu
+           closes, and without somewhere to send it the keyboard would end
+           up on the body and typing would go nowhere. */
+        tabIndex={-1}
+        onFocus={(e) => {
+          if (e.target === e.currentTarget) screenRef.current?.focus({ preventScroll: true });
         }}
-        onPaste={onPaste}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onWheel={onWheel}
+        onPointerDown={(e) => {
+          // The grid does not fill the box: there is padding around it, and
+          // short rows leave the right-hand side empty. Clicking any of that
+          // must still put the keyboard on the terminal.
+          if (e.target === e.currentTarget) screenRef.current?.focus({ preventScroll: true });
+        }}
       >
-        {grid.map((row, y) => (
-          <div key={y} className="tv__row" style={{ top: y * cell.height, height: cell.height }}>
-            {row ? row.spans.map((span, i) => <Cell key={i} span={span} cell={cell} />) : null}
-          </div>
-        ))}
-
-        {showCursor && (
-          <div
-            className={`tv__cursor tv__cursor--${cursorStyle} ${cursorBlink ? "is-blinking" : ""}`}
-            style={{
-              top: cursor.row * cell.height,
-              left: cursor.col * cell.width,
-              width: cell.width,
-              height: cell.height,
-            }}
-            aria-hidden
-          />
-        )}
-      </div>
-
-      {scrollMax > 0 && (
         <div
-          ref={trackRef}
-          className={`tv__scrollbar ${scrolledBack > 0 ? "is-active" : ""}`}
-          aria-hidden
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.currentTarget.setPointerCapture(e.pointerId);
-            draggingRef.current = true;
-            dragTo(e.clientY);
-          }}
-          onPointerMove={(e) => {
-            if (draggingRef.current) dragTo(e.clientY);
-          }}
-          onPointerUp={(e) => {
-            draggingRef.current = false;
-            e.currentTarget.releasePointerCapture(e.pointerId);
-          }}
-          onPointerCancel={() => {
-            draggingRef.current = false;
-          }}
+          ref={screenRef}
+          className="tv__screen"
+          style={gridStyle}
+          tabIndex={0}
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Terminal"
+          onKeyDown={onKeyDown}
+          onPaste={onPaste}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onPointerDown={onScreenPointerDown}
+          onPointerMove={onScreenPointerMove}
+          onPointerUp={endSelecting}
+          onPointerCancel={endSelecting}
         >
-          <div
-            className="tv__thumb"
-            style={{ top: `${thumb.top * 100}%`, height: `${thumb.height * 100}%` }}
-          />
+          {highlights.map((seg) => (
+            <div
+              key={seg.y}
+              className="tv__selection"
+              style={{
+                top: seg.y * cell.height,
+                left: seg.col * cell.width,
+                width: seg.width * cell.width,
+                height: cell.height,
+              }}
+              aria-hidden
+            />
+          ))}
+
+          {grid.map((row, y) => (
+            <div key={y} className="tv__row" style={{ top: y * cell.height, height: cell.height }}>
+              {row ? row.spans.map((span, i) => <Cell key={i} span={span} cell={cell} />) : null}
+            </div>
+          ))}
+
+          {showCursor && (
+            <div
+              className={`tv__cursor tv__cursor--${cursorStyle} ${cursorBlink ? "is-blinking" : ""}`}
+              style={{
+                top: cursor.row * cell.height,
+                left: cursor.col * cell.width,
+                width: cell.width,
+                height: cell.height,
+              }}
+              aria-hidden
+            />
+          )}
         </div>
-      )}
 
-      {scrolledBack > 0 && (
-        <button type="button" className="tv__scrollback" onClick={() => scrollTo(0)}>
-          {scrolledBack} rows back — jump to latest
-        </button>
-      )}
+        {scrollMax > 0 && (
+          <div
+            ref={trackRef}
+            className={`tv__scrollbar ${scrolledBack > 0 ? "is-active" : ""}`}
+            aria-hidden
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              draggingRef.current = true;
+              dragTo(e.clientY);
+            }}
+            onPointerMove={(e) => {
+              if (draggingRef.current) dragTo(e.clientY);
+            }}
+            onPointerUp={(e) => {
+              draggingRef.current = false;
+              e.currentTarget.releasePointerCapture(e.pointerId);
+            }}
+            onPointerCancel={() => {
+              draggingRef.current = false;
+            }}
+          >
+            <div
+              className="tv__thumb"
+              style={{ top: `${thumb.top * 100}%`, height: `${thumb.height * 100}%` }}
+            />
+          </div>
+        )}
 
-      {status.phase !== "running" && <StatusOverlay status={status} />}
-    </div>
+        {scrolledBack > 0 && (
+          <button type="button" className="tv__scrollback" onClick={() => scrollTo(0)}>
+            {scrolledBack} rows back — jump to latest
+          </button>
+        )}
+
+        {status.phase !== "running" && <StatusOverlay status={status} />}
+      </div>
+    </ContextMenu>
   );
 }
 

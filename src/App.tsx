@@ -498,6 +498,7 @@ function Shell() {
         {!sidebar.collapsed && (
           <motion.aside
             key="sidebar"
+            ref={sidebar.paneRef as React.Ref<HTMLElement>}
             className="app__sidebar"
             style={{ width: sidebar.width }}
             initial={{ opacity: 0 }}

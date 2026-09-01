@@ -739,7 +739,13 @@ function TreeRow({
   const isActive = activePath === node.path;
   const isSelected = slice.selectedPath === node.path;
   const isHidden = node.name.startsWith(".");
-  const indent = (depth - 1) * 12 + 6;
+  /* Indent is capped against the row's own width, not just the depth.
+     At 12px a level a deeply nested file had more indent than the pane
+     was wide, so the name started past the right edge and was clipped
+     away entirely. `min()` resolves the percentage against the row, so
+     the cap follows the pane as it is resized — half the row is always
+     left for the name. */
+  const indent = `min(${(depth - 1) * 12 + 6}px, 50%)`;
 
   const onClick = () => {
     useExplorer.getState().setSelected(node.path);
