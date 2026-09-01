@@ -19,6 +19,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ---
 
+## [0.7.2] — 2026-09-01
+
+### Fixed
+- **`Shift+Tab` was never an app shortcut — it was an unhandled key.** WebKitGTK's keyval table names `GDK_KEY_Tab` and `KP_Tab` but not `ISO_Left_Tab`, which is the keysym `Shift+Tab` produces, so the press arrived with `key: "Unidentified"` and only `code`/`keyCode` saying Tab. `encodeKey` dropped it as IME noise, so nothing was sent to the shell **and** nothing was cancelled — and the webview ran its own default for the key, moving focus to the previous tab stop. 0.7.1 read that as WebKitGTK ignoring `preventDefault`; the diagnosis was wrong. `keyOf` (`src/bridge/pty.ts`) maps the press back to `Tab`, `CSI Z` reaches the shell, and cancelling the keydown keeps the keyboard on the surface.
+- **Focus is no longer yanked back after a key.** 0.7.1's recovery took the keyboard back on any blur within 150 ms of a handled keystroke, so typing a command and clicking straight into the editor left focus on the terminal. Gone with the tab-order suppression, whose `MutationObserver` also re-scanned the whole panel on every frame paint.
+- **Popping the terminal out moves the shells.** The panel kept its sessions and respawned them the next time it opened, so every running program died in transit and both windows held shells. Running sessions are handed over live (`pty_adopt`) and keep running; an exited one is respawned in the new window.
+- **A pop-out window closed from its title bar leaked its shells.** Destroying the webview unmounts nothing, so `pty_kill` was never called and each session held a pty, a writer thread and 5000 lines of scrollback until app exit. Sessions record their owning window and `shutdown_window` ends them on `Destroyed`.
+- **Terminal sessions leaked across projects.** Switching or closing a project closed the document tabs but left the outgoing project's shells running, and the next autosave wrote them into the incoming project's snapshot.
+- **`pty_write` no longer blocks the UI thread.** Sync Tauri commands run on the UI thread and a pty write blocks once the line discipline's input queue (~4 KB) is full, so pasting into a shell whose foreground program was not reading froze the window. Writes go through a per-session writer thread that preserves arrival order. `pty_kill`'s SIGHUP → grace → SIGKILL → `wait` moved off the UI thread too; it ran on every tab close, restart and root toggle.
+- **A resize or scroll could blank the screen.** Frame sequence numbers were taken under the parser lock but emitted after releasing it, so a full repaint could be delivered behind a delta built after it. The renderer drops the lower `seq`, then applied the delta to a grid of the wrong shape. Build and emit now share one per-session lock.
+- **"Open in Terminal" landed on dead tabs.** Session status moved from the panel's local state into the store, so `openAt` can tell a live shell from one that has exited.
+- **A new terminal for a collapsed folder opened in its parent.** The cwd derivation only counted directories the tree had already listed; `directoryOf` (`src/store/explorer.ts`) also reads the parent listing's `isDir`, and the sidebar's terminal bubble shares it.
+- **A restored-open terminal panel took the keyboard at startup**, off whatever the workspace restore had put in the editor.
+
+### Added
+- **Keyboard navigation in the terminal tab strip** — `←`/`→` between tabs, `Home`/`End` to the ends, `Delete` to close. With a roving `tabindex` and no arrow handling the inactive tabs were unreachable. Focus follows the tab that takes over when the focused one closes.
+
+### Removed
+- **The pop-out window's `terminal:cwd` / `spark:terminal:cwd` listeners.** Nothing emitted either event, and changing `cwd` never affected a running session.
+
+---
+
 ## [0.7.1] — 2026-09-01
 
 ### Fixed
@@ -247,7 +269,8 @@ Initial public scaffolding. Usable in Vite (browser mock FS) and via Tauri when 
 - Session restore (`app_data_dir/recents.json`, window geometry) — host commands exist, renderer boot wiring is best-effort.
 - Single window, single user, local files only — no sync, no LSP/DAP, no collaboration (by design — see `explanation.md:7`).
 
-[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.7.2
 [0.5.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.5.0
 [0.4.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.4.0
 [0.3.3]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.3

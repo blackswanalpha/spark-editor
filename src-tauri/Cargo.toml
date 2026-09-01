@@ -1,6 +1,6 @@
 [package]
 name = "spark-editor"
-version = "0.7.1"
+version = "0.7.2"
 description = "sparkEditor — markdown, rich, code in one window"
 authors = ["sparkEditor team"]
 edition = "2021"
