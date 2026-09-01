@@ -18,7 +18,7 @@ import { Dialog, DialogFooter } from "@ui/Dialog";
 import { Input } from "@ui/Input";
 import { Button } from "@ui/Button";
 import { Popover, PopoverTrigger, PopoverContent } from "@ui/Popover";
-import { useExplorer, type ExplorerNode } from "@store/explorer";
+import { useExplorer, directoryOf, type ExplorerNode } from "@store/explorer";
 import { splitPath, openFolderDialog } from "@bridge/commands";
 import { langIdOf } from "@editor/CodeEditor/languages";
 import { ExplorerContextMenu } from "./ExplorerContextMenu";
@@ -233,13 +233,7 @@ function Explorer({
 
   const bubbleCwd = useMemo(() => {
     const sel = slice.selectedPath;
-    if (sel) {
-      if (slice.children.has(sel)) return sel;
-      const idx = Math.max(sel.lastIndexOf("/"), sel.lastIndexOf("\\"));
-      if (idx > 0) return sel.slice(0, idx) || "/";
-      return root;
-    }
-    return root;
+    return sel ? directoryOf(slice.children, sel) : root;
   }, [slice.selectedPath, slice.children, root]);
 
   return (

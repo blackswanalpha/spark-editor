@@ -27,6 +27,10 @@ export interface TerminalSession {
   restartKey: number;
   /** Title reported by the shell, when it sets one. */
   title: string | null;
+  /** A live host session to attach to instead of spawning — set on a tab
+      that was moved from another window. Only the first mount uses it; a
+      restart spawns fresh. */
+  adopt?: string;
 }
 
 /**

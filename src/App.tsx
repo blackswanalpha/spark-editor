@@ -36,6 +36,7 @@ import { useDocs } from "@store/documents";
 import { useExplorer } from "@store/explorer";
 import { hydrateSettings } from "@store/settings";
 import { useProjects, hydrateProjects, projectId } from "@store/projects";
+import { useTerminal } from "@store/terminal";
 import {
   restoreWorkspace,
   startWorkspaceAutosave,
@@ -401,6 +402,9 @@ function Shell() {
         // files into the next.
         const docs = useDocs.getState();
         for (const id of [...docs.order]) docs.close(id);
+        // Same for the shells: a terminal rooted in the old project is the
+        // same leak, and autosave would write it into the new snapshot.
+        useTerminal.getState().reset();
 
         const project = useProjects.getState().openProject(path);
         setCurrentRoot(project.rootPath);
@@ -438,6 +442,7 @@ function Shell() {
       teardownAutosave = null;
       const docs = useDocs.getState();
       for (const id of [...docs.order]) docs.close(id);
+      useTerminal.getState().reset();
       void useExplorer.getState().setRoot("/");
       useExplorer.setState({ root: null, explicitRoot: false, expanded: new Set<string>() });
       useProjects.getState().clearActive();
@@ -773,52 +778,47 @@ function isTerminalWindow(): boolean {
 const TerminalStandaloneInner = lazy(() =>
   import("@shell/TerminalPanel").then((m) => ({ default: m.TerminalStandaloneInner })),
 );
+type PoppedTab = import("@shell/TerminalPanel").PoppedTab;
+
+/** The panel's tabs as the pop-out URL carries them; garbage is no tabs. */
+function parsePoppedTabs(raw: string | null): PoppedTab[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return undefined;
+    const tabs = parsed.filter(
+      (t): t is PoppedTab => typeof t?.cwd === "string" && typeof t?.label === "string",
+    );
+    return tabs.length
+      ? tabs.map((t) => ({
+          cwd: t.cwd,
+          label: t.label,
+          privilege: t.privilege === "root" ? "root" : "user",
+          adopt: typeof t.adopt === "string" ? t.adopt : undefined,
+        }))
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Terminal-only window (`index.html?terminal=1`), opened as a separate
- * OS window. The session runs in the Rust host, so the cwd is all this
- * view needs; the main window pushes updates over the Tauri event bus.
+ * OS window. The session runs in the Rust host, so the cwd it was opened
+ * with is all this view needs: each tab keeps the directory it spawned
+ * in, and "+" starts beside the active one.
  */
 function TerminalStandalone() {
   const params = new URLSearchParams(window.location.search);
-  const initialCwd = params.get("cwd") || "/";
+  const cwd = params.get("cwd") || "/";
   const initialPrivilege = params.get("privilege") === "root" ? "root" : "user";
   const initialMobile = params.get("mobile") === "1";
-  const [cwd, setCwd] = useState(initialCwd);
+  const tabs = parsePoppedTabs(params.get("tabs"));
+  const activeIndex = Number(params.get("active") ?? 0) || 0;
 
   /* This window has its own store instance, so it hydrates settings for
      itself and then follows the main window over the same broadcast. */
   useEffect(() => hydrateSettings(), []);
-
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    let cancelled = false;
-
-    const onMessage = (e: MessageEvent) => {
-      const d = e.data as { type?: string; cwd?: string } | null;
-      if (d?.type === "spark:terminal:cwd" && typeof d.cwd === "string") setCwd(d.cwd);
-    };
-    window.addEventListener("message", onMessage);
-
-    void (async () => {
-      try {
-        const { listen } = await import("@tauri-apps/api/event");
-        const fn = await listen<string>("terminal:cwd", (ev) => {
-          if (typeof ev.payload === "string") setCwd(ev.payload);
-        });
-        if (cancelled) fn();
-        else unlisten = fn;
-      } catch {
-        /* not running under Tauri */
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener("message", onMessage);
-      unlisten?.();
-    };
-  }, []);
 
   return (
     <Suspense
@@ -832,6 +832,8 @@ function TerminalStandalone() {
         cwd={cwd}
         privilege={initialPrivilege}
         initialMobile={initialMobile}
+        tabs={tabs}
+        activeIndex={activeIndex}
       />
     </Suspense>
   );

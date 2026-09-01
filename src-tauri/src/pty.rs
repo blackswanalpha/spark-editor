@@ -209,10 +209,16 @@ struct Session {
     shell: String,
     cwd: String,
     privilege: PtyPrivilege,
+    /// Label of the window whose view holds this shell. A window that
+    /// goes away takes its shells with it — see `shutdown_window` — and
+    /// `pty_adopt` moves one when the terminal is popped out.
+    owner: Mutex<String>,
     parser: Arc<Mutex<SessionParser>>,
     /// Latest OSC-set window title, written by `TitleSink`.
     title: Arc<Mutex<Option<String>>>,
-    writer: Mutex<Box<dyn Write + Send>>,
+    /// Input queue for the writer thread; `None` once the session is over.
+    /// See `spawn_writer` for why writes do not happen on the caller.
+    writer: Mutex<Option<std::sync::mpsc::Sender<Vec<u8>>>>,
     master: Mutex<Box<dyn portable_pty::MasterPty + Send>>,
     child: Mutex<Box<dyn portable_pty::Child + Send + Sync>>,
     /// Set once the reader thread has seen EOF or `kill` was called;
@@ -225,6 +231,8 @@ struct Session {
     last_rows: Mutex<Vec<String>>,
     seq: AtomicU64,
     size: Mutex<(u16, u16)>,
+    /// Held across build *and* emit of a frame — see `emit_frame`.
+    emit_lock: Mutex<()>,
 }
 
 /// A flag with a condition variable, so the frame pump can sleep until
@@ -495,6 +503,19 @@ fn build_frame(session: &Session, force_full: bool) -> Result<Frame, HostError> 
 }
 
 fn emit_frame(app: &AppHandle, session: &Session, force_full: bool) {
+    /* Frames are built from three threads: the pump, the reader's final
+       flush, and the resize/scroll/refresh commands. `build_frame` takes
+       its sequence number under the parser lock, but the emit happened
+       after that lock was released — so two frames could leave in the
+       opposite order to their numbers. The renderer drops the lower one,
+       and when that was the full repaint a resize or scroll had just
+       produced, the delta it kept was applied against a grid of the wrong
+       shape: a mostly blank screen until the next full frame. Ordering
+       the emit with the build closes that. */
+    let _ordered = session
+        .emit_lock
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     match build_frame(session, force_full) {
         Ok(frame) => {
             // A frame with no changed rows still matters when the cursor
@@ -651,6 +672,7 @@ pub fn pty_default_shell() -> String {
 #[tauri::command]
 pub fn pty_spawn(
     app: AppHandle,
+    window: tauri::Window,
     manager: tauri::State<'_, PtyManager>,
     cwd: String,
     rows: Option<u16>,
@@ -730,6 +752,7 @@ pub fn pty_spawn(
         shell: shell.clone(),
         cwd: cwd.clone(),
         privilege,
+        owner: Mutex::new(window.label().to_string()),
         parser: Arc::new(Mutex::new(vt100::Parser::new_with_callbacks(
             rows,
             cols,
@@ -737,7 +760,7 @@ pub fn pty_spawn(
             title_sink,
         ))),
         title: title_slot,
-        writer: Mutex::new(writer),
+        writer: Mutex::new(Some(spawn_writer(writer))),
         master: Mutex::new(pair.master),
         child: Mutex::new(child),
         closed: Arc::new(AtomicBool::new(false)),
@@ -745,6 +768,7 @@ pub fn pty_spawn(
         last_rows: Mutex::new(vec![String::new(); rows as usize]),
         seq: AtomicU64::new(0),
         size: Mutex::new((rows, cols)),
+        emit_lock: Mutex::new(()),
     });
 
     manager
@@ -763,6 +787,38 @@ pub fn pty_spawn(
         rows,
         cols,
     })
+}
+
+/// Feed the pty from its own thread, in arrival order.
+///
+/// Commands run on the UI thread, and a write to a pty blocks once the
+/// line discipline's input queue is full — about 4 KB while the
+/// foreground program is not reading. Pasting a screenful into a shell
+/// that was busy running something froze the whole window until that
+/// program got round to its stdin. A queue keeps the order keystrokes
+/// arrived in, which a thread-per-write would not.
+///
+/// The thread ends when the sender is dropped (the session was killed or
+/// its child exited) or the pty refuses a write, and dropping the writer
+/// with it releases that side of the master.
+fn spawn_writer(mut writer: Box<dyn Write + Send>) -> std::sync::mpsc::Sender<Vec<u8>> {
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        for chunk in rx {
+            if writer.write_all(&chunk).and_then(|_| writer.flush()).is_err() {
+                break;
+            }
+        }
+    });
+    tx
+}
+
+/// Stop accepting input for a session that is over, so the writer
+/// thread retires instead of waiting on a queue nobody feeds.
+fn close_writer(session: &Session) {
+    if let Ok(mut slot) = session.writer.lock() {
+        slot.take();
+    }
 }
 
 /// How long a burst of output is allowed to accumulate before it is
@@ -855,6 +911,7 @@ fn spawn_reader(app: AppHandle, session: Arc<Session>, mut reader: Box<dyn Read 
         // Wake the pump so it sees `closed` and stops, rather than
         // sitting out its timeout.
         dirty.raise();
+        close_writer(&session);
 
         let code = session
             .child
@@ -911,9 +968,16 @@ pub fn pty_write(
             parser.screen_mut().set_scrollback(0);
         }
     }
-    let mut w = session.writer.lock().map_err(poisoned)?;
-    w.write_all(data.as_bytes())?;
-    w.flush()?;
+    let slot = session.writer.lock().map_err(poisoned)?;
+    let sent = slot
+        .as_ref()
+        .map(|tx| tx.send(data.into_bytes()).is_ok())
+        .unwrap_or(false);
+    if !sent {
+        return Err(HostError::Internal {
+            message: "session has exited".into(),
+        });
+    }
     Ok(())
 }
 
@@ -1024,11 +1088,46 @@ pub fn pty_kill(manager: tauri::State<'_, PtyManager>, id: String) -> Result<(),
     // Wake the frame pump so it retires now instead of waiting out its
     // timeout on a session nobody is looking at any more.
     session.dirty.raise();
-    if let Ok(mut child) = session.child.lock() {
-        let _ = child.kill();
-        let _ = child.wait();
-    }
+    close_writer(&session);
+    /* `kill` is SIGHUP, a grace period of up to 200ms, then SIGKILL, and
+       `wait` reaps whatever that took. This command runs on the UI
+       thread, and every tab close, restart and root toggle came through
+       here — each one a visible stall while a shell shut down. The reap
+       is not something the caller can act on, so it moves off the UI. */
+    std::thread::spawn(move || {
+        if let Ok(mut child) = session.child.lock() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    });
     Ok(())
+}
+
+/// Hand a live session to the calling window. The pop-out adopts the
+/// panel's shells instead of respawning them, so whatever was running
+/// keeps running; from here on it is that window's close that ends them.
+#[tauri::command]
+pub fn pty_adopt(
+    window: tauri::Window,
+    manager: tauri::State<'_, PtyManager>,
+    id: String,
+) -> Result<PtySession, HostError> {
+    let session = manager.get(&id)?;
+    if session.closed.load(Ordering::SeqCst) {
+        return Err(HostError::NotFound {
+            path: format!("pty session {id}"),
+        });
+    }
+    *session.owner.lock().map_err(poisoned)? = window.label().to_string();
+    let (rows, cols) = *session.size.lock().map_err(poisoned)?;
+    Ok(PtySession {
+        id: session.id.clone(),
+        shell: session.shell.clone(),
+        cwd: session.cwd.clone(),
+        privilege: session.privilege,
+        rows,
+        cols,
+    })
 }
 
 #[tauri::command]
@@ -1059,9 +1158,34 @@ pub fn shutdown_all(manager: &PtyManager) {
             Err(_) => return,
         }
     };
+    end_sessions(sessions);
+}
+
+/// Terminate the sessions a window held. A pop-out closed from its title
+/// bar destroys the webview without unmounting anything, so nothing on
+/// the renderer side gets to call `pty_kill`; its shells used to stay in
+/// the table, running, until the app exited.
+pub fn shutdown_window(manager: &PtyManager, label: &str) {
+    let sessions = {
+        let Ok(mut all) = manager.sessions.lock() else { return };
+        let owned: Vec<String> = all
+            .iter()
+            .filter(|(_, s)| s.owner.lock().is_ok_and(|o| *o == label))
+            .map(|(id, _)| id.clone())
+            .collect();
+        owned
+            .iter()
+            .filter_map(|id| all.remove(id))
+            .collect::<Vec<_>>()
+    };
+    end_sessions(sessions);
+}
+
+fn end_sessions(sessions: Vec<Arc<Session>>) {
     for session in sessions {
         session.closed.store(true, Ordering::SeqCst);
         session.dirty.raise();
+        close_writer(&session);
         if let Ok(mut child) = session.child.lock() {
             let _ = child.kill();
             // Reap it. A killed child that is never waited on stays a
@@ -1301,6 +1425,54 @@ mod tests {
         let cmd = build_command("/bin/sh", "/tmp", PtyPrivilege::User).expect("build");
         let program = cmd.get_argv()[0].to_string_lossy().to_string();
         assert!(program.ends_with("sh"), "got {program}");
+    }
+
+    /// The writer thread is what keeps a blocked pty off the UI thread;
+    /// what it must not cost is ordering, or keystrokes would arrive
+    /// scrambled. It also has to let go of the writer when the session
+    /// ends, or the master's write side stays open for the app's life.
+    #[test]
+    fn writer_thread_keeps_arrival_order_and_retires_when_closed() {
+        struct Sink {
+            bytes: Arc<Mutex<Vec<u8>>>,
+            dropped: Arc<AtomicBool>,
+        }
+        impl Write for Sink {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                self.bytes.lock().unwrap().extend_from_slice(b);
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        impl Drop for Sink {
+            fn drop(&mut self) {
+                self.dropped.store(true, Ordering::SeqCst);
+            }
+        }
+
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let dropped = Arc::new(AtomicBool::new(false));
+        let tx = spawn_writer(Box::new(Sink {
+            bytes: bytes.clone(),
+            dropped: dropped.clone(),
+        }));
+
+        let mut expected = String::new();
+        for i in 0..2000 {
+            let chunk = format!("{i},");
+            expected.push_str(&chunk);
+            tx.send(chunk.into_bytes()).expect("writer alive");
+        }
+        drop(tx);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !dropped.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(dropped.load(Ordering::SeqCst), "writer thread never retired");
+        assert_eq!(String::from_utf8(bytes.lock().unwrap().clone()).unwrap(), expected);
     }
 
     #[test]

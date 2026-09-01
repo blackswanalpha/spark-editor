@@ -74,6 +74,12 @@ describe("encodeKey", () => {
   it("encodes navigation and function keys", () => {
     expect(encodeKey(key({ key: "Tab" }), NORMAL)).toBe("\t");
     expect(encodeKey(key({ key: "Tab", shiftKey: true }), NORMAL)).toBe("\x1b[Z");
+    // WebKitGTK: Shift+Tab is ISO_Left_Tab, which its keyval table does
+    // not name — `key` is "Unidentified" and only code/keyCode say Tab.
+    expect(encodeKey(key({ key: "Unidentified", code: "Tab", keyCode: 9, shiftKey: true }), NORMAL)).toBe("\x1b[Z");
+    expect(encodeKey(key({ key: "Unidentified", keyCode: 9, shiftKey: true }), NORMAL)).toBe("\x1b[Z");
+    // A genuinely unidentified key is still nothing.
+    expect(encodeKey(key({ key: "Unidentified" }), NORMAL)).toBeNull();
     expect(encodeKey(key({ key: "Delete" }), NORMAL)).toBe("\x1b[3~");
     expect(encodeKey(key({ key: "PageUp" }), NORMAL)).toBe("\x1b[5~");
     expect(encodeKey(key({ key: "F1" }), NORMAL)).toBe("\x1bOP");
