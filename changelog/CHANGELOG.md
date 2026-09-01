@@ -19,6 +19,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ---
 
+## [0.7.1] — 2026-09-01
+
+### Fixed
+- **`Shift+Tab` took the keyboard out of the terminal.** Tab and Shift+Tab are focus-navigation keys to the engine before they are anything else, and WebKitGTK traverses on them even when the key press's default is cancelled: the bytes reached the shell, but focus landed on the panel's Restart button and the next keystroke went nowhere. While a shell holds the keyboard, nothing else inside the terminal panel or the pop-out window is a tab stop; a `MutationObserver` covers controls that appear while it is focused, and everything is restored on blur so the panel's controls stay keyboard-reachable when you are not typing into a shell.
+
+---
+
 ## [0.7.0] — 2026-09-01
 
 ### Added
