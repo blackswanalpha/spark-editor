@@ -268,3 +268,52 @@ describe("TerminalView — focus survives a key the engine wants for navigation"
     expect(document.activeElement).toBe(elsewhere);
   });
 });
+
+describe("TerminalView — the shell holds the keyboard", () => {
+  beforeEach(() => {
+    ptyWrite.mockClear();
+    frameHandlers.length = 0;
+  });
+  afterEach(cleanup);
+
+  /** The panel chrome the engine used to traverse into. */
+  function panelWithTerminal() {
+    const panel = document.createElement("div");
+    panel.className = "term term--floating";
+    const restart = document.createElement("button");
+    restart.textContent = "Restart";
+    panel.appendChild(restart);
+    // The surface mounts inside the panel, as it does in the real tree.
+    const mount = document.createElement("div");
+    panel.appendChild(mount);
+    document.body.appendChild(panel);
+    return { panel, restart, mount };
+  }
+
+  it("removes the panel's tab stops while the surface is focused", async () => {
+    /* Reported from the running app: Shift+Tab moved focus onto the
+       panel's Restart button. preventDefault is the correct fix and
+       WebKitGTK does not honour it, so the tab order is the only lever
+       left. */
+    const { panel, restart, mount } = panelWithTerminal();
+    render(<TerminalView cwd="/tmp" privilege="user" />, { container: mount });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const surface = panel.querySelector<HTMLElement>(".tv__screen")!;
+    expect(restart.tabIndex).toBe(0);
+
+    act(() => surface.focus());
+    expect(restart.tabIndex).toBe(-1);
+    // The terminal itself must stay reachable.
+    expect(surface.tabIndex).toBe(0);
+
+    act(() => surface.blur());
+    // Restored the moment you are not typing into a shell, so the
+    // controls stay keyboard-reachable.
+    expect(restart.tabIndex).toBe(0);
+  });
+});
