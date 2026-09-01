@@ -6,10 +6,17 @@
    pane comes back the size the user left it.
 
    Kept out of App.tsx because the drag needs pointer capture and
-   rAF batching to stay smooth, and because the clamping rules are
-   worth testing on their own.
+   because the clamping rules are worth testing on their own.
+
+   The drag deliberately does NOT go through React state. Setting
+   state on every frame re-rendered the whole shell — including the
+   file tree, where every row carries a Radix context menu — so the
+   pane lagged the pointer on any real project. Instead the width is
+   written straight onto the pane element while the pointer is down
+   and committed to state once, on release. `paneRef` is how the
+   element gets here; attach it to the element the width applies to.
    ============================================================ */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export const SIDEBAR_MIN = 180;
 export const SIDEBAR_MAX = 640;
@@ -17,14 +24,39 @@ export const SIDEBAR_DEFAULT = 260;
 /** Dragging narrower than this snaps the pane closed, like an IDE. */
 export const SIDEBAR_COLLAPSE_AT = 120;
 
+/** The plugin rail's fixed column, from the grid in App.css. */
+const RAIL_WIDTH = 51;
+/** Editor width that must survive however far the pane is dragged. */
+const MAIN_MIN = 320;
+
 const WIDTH_KEY = "spark.sidebar.width";
 const COLLAPSED_KEY = "spark.sidebar.collapsed";
 
-export function clampWidth(px: number): number {
+/**
+ * The widest the pane may be in a viewport of `viewportWidth`.
+ *
+ * SIDEBAR_MAX alone is not enough: on a 900px window a 640px pane leaves
+ * about 200px of editor, and on a narrower one the pane simply ran past
+ * the window. The floor is SIDEBAR_MIN so the return value is always a
+ * usable width rather than something negative on a tiny viewport.
+ */
+export function maxWidthFor(viewportWidth: number): number {
+  if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) return SIDEBAR_MAX;
+  return Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, viewportWidth - RAIL_WIDTH - MAIN_MIN));
+}
+
+export function clampWidth(px: number, max: number = SIDEBAR_MAX): number {
   // NaN has no sensible clamp, so it falls back. Infinities do — a
   // runaway drag should pin at the edge, not snap back to the default.
   if (Number.isNaN(px)) return SIDEBAR_DEFAULT;
-  return Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, px)));
+  const ceiling = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, max));
+  return Math.round(Math.min(ceiling, Math.max(SIDEBAR_MIN, px)));
+}
+
+/** The clamp against the live window, which is what a drag has to obey. */
+function clampToViewport(px: number): number {
+  const viewport = typeof window === "undefined" ? 0 : window.innerWidth;
+  return clampWidth(px, maxWidthFor(viewport));
 }
 
 function readWidth(): number {
@@ -50,6 +82,8 @@ export interface SidebarLayout {
   width: number;
   collapsed: boolean;
   dragging: boolean;
+  /** Attach to the element the width applies to, so the drag can move it. */
+  paneRef: React.MutableRefObject<HTMLElement | null>;
   setWidth: (px: number) => void;
   toggle: () => void;
   setCollapsed: (v: boolean) => void;
@@ -70,10 +104,16 @@ export function useSidebarLayout(): SidebarLayout {
   // pointermove handler needs the previous width immediately.
   const widthRef = useRef(width);
   widthRef.current = width;
+  const collapsedRef = useRef(collapsed);
+  collapsedRef.current = collapsed;
+
+  const paneRef = useRef<HTMLElement | null>(null);
   const rafRef = useRef(0);
+  /** Width the DOM is showing while a drag is in flight, else null. */
+  const liveRef = useRef<number | null>(null);
 
   const setWidth = useCallback((px: number) => {
-    setWidthState(clampWidth(px));
+    setWidthState(clampToViewport(px));
   }, []);
 
   const setCollapsed = useCallback((v: boolean) => {
@@ -86,11 +126,12 @@ export function useSidebarLayout(): SidebarLayout {
 
   const reset = useCallback(() => {
     setCollapsedState(false);
-    setWidthState(SIDEBAR_DEFAULT);
+    setWidthState(clampToViewport(SIDEBAR_DEFAULT));
   }, []);
 
-  /* Persist. Writing on every drag frame would hammer localStorage, so
-     this only runs when the settled value changes. */
+  /* Persist. The drag no longer sets state per frame, so this runs once
+     per settled width rather than sixty times a second — which matters,
+     because localStorage writes are synchronous. */
   useEffect(() => {
     try {
       localStorage.setItem(WIDTH_KEY, String(width));
@@ -107,61 +148,85 @@ export function useSidebarLayout(): SidebarLayout {
     }
   }, [collapsed]);
 
-  const startResize = useCallback(
-    (e: React.PointerEvent) => {
-      e.preventDefault();
-      const startX = e.clientX;
-      const startWidth = collapsed ? 0 : widthRef.current;
-      const handle = e.currentTarget as HTMLElement;
-      try {
-        handle.setPointerCapture(e.pointerId);
-      } catch {
-        /* capture unsupported — the window listeners below still work */
+  /* A render that happens mid-drag (a toast, a terminal frame, anything)
+     would repaint the pane at the last committed width and make it jump
+     backwards under the pointer. Re-applying the live width after every
+     commit keeps the element where the drag put it. */
+  useLayoutEffect(() => {
+    const live = liveRef.current;
+    if (live != null && paneRef.current) paneRef.current.style.width = `${live}px`;
+  });
+
+  const startResize = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = collapsedRef.current ? 0 : widthRef.current;
+    const handle = e.currentTarget as HTMLElement;
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch {
+      /* capture unsupported — the window listeners below still work */
+    }
+    setDragging(true);
+
+    let pending = startWidth;
+
+    const paint = () => {
+      rafRef.current = 0;
+
+      /* Below the snap threshold the pane closes rather than becoming a
+         useless sliver the user then has to find the edge of again.
+         Crossing the threshold is the one thing in a drag that has to go
+         through React, because collapsing unmounts the pane. */
+      if (pending < SIDEBAR_COLLAPSE_AT) {
+        liveRef.current = null;
+        if (!collapsedRef.current) setCollapsedState(true);
+        return;
       }
-      setDragging(true);
+      if (collapsedRef.current) setCollapsedState(false);
 
-      let pending = startWidth;
-      const commit = () => {
+      const next = clampToViewport(pending);
+      liveRef.current = next;
+      // The width goes on the element directly; state catches up on
+      // release. This is the whole reason the drag tracks the pointer.
+      if (paneRef.current) paneRef.current.style.width = `${next}px`;
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      pending = startWidth + (ev.clientX - startX);
+      if (rafRef.current) return;
+      rafRef.current = requestAnimationFrame(paint);
+    };
+
+    const onUp = () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
         rafRef.current = 0;
-        // Below the snap threshold the pane closes rather than becoming a
-        // useless sliver the user then has to find the edge of again.
-        if (pending < SIDEBAR_COLLAPSE_AT) {
-          setCollapsedState(true);
-        } else {
-          setCollapsedState(false);
-          setWidthState(clampWidth(pending));
-        }
-      };
+        paint();
+      }
+      // Commit whatever the DOM is showing, then hand the element back to
+      // React so the next render owns its width again.
+      const live = liveRef.current;
+      liveRef.current = null;
+      if (live != null) {
+        if (paneRef.current) paneRef.current.style.removeProperty("width");
+        setWidthState(live);
+      }
+      setDragging(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      try {
+        handle.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
+    };
 
-      const onMove = (ev: PointerEvent) => {
-        pending = startWidth + (ev.clientX - startX);
-        if (rafRef.current) return;
-        rafRef.current = requestAnimationFrame(commit);
-      };
-
-      const onUp = () => {
-        if (rafRef.current) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = 0;
-          commit();
-        }
-        setDragging(false);
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onUp);
-        try {
-          handle.releasePointerCapture(e.pointerId);
-        } catch {
-          /* already released */
-        }
-      };
-
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onUp);
-    },
-    [collapsed],
-  );
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, []);
 
   const onHandleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -177,7 +242,7 @@ export function useSidebarLayout(): SidebarLayout {
         if (next < SIDEBAR_COLLAPSE_AT || widthRef.current <= SIDEBAR_MIN) {
           setCollapsedState(true);
         } else {
-          setWidthState(clampWidth(next));
+          setWidthState(clampToViewport(next));
         }
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
@@ -185,7 +250,7 @@ export function useSidebarLayout(): SidebarLayout {
           setCollapsedState(false);
           return;
         }
-        setWidthState(clampWidth(widthRef.current + step));
+        setWidthState(clampToViewport(widthRef.current + step));
       } else if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         toggle();
@@ -200,7 +265,7 @@ export function useSidebarLayout(): SidebarLayout {
   /* Never leave the pane wider than the window after a shrink. */
   useEffect(() => {
     const onResize = () => {
-      const cap = Math.max(SIDEBAR_MIN, window.innerWidth - 320);
+      const cap = maxWidthFor(window.innerWidth);
       setWidthState((w) => (w > cap ? clampWidth(cap) : w));
     };
     window.addEventListener("resize", onResize);
@@ -219,6 +284,7 @@ export function useSidebarLayout(): SidebarLayout {
     width,
     collapsed,
     dragging,
+    paneRef,
     setWidth,
     toggle,
     setCollapsed,

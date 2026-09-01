@@ -257,14 +257,27 @@ ul.sidebar__list {
   color: var(--text);
   user-select: none;
   border-radius: var(--radius-sm);
+  min-width: 0;
+  overflow: hidden;
 }
 .tree-root[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
 .tree-root:focus-visible { box-shadow: var(--focus-ring); }
-.tree-root__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* `min-width: 0` is what actually makes the ellipsis work: a flex item
+   defaults to `min-width: auto`, so it refuses to shrink below its text
+   and pushes the row wider than the pane instead of truncating. */
+.tree-root__name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
 
 .tree-item {
   display: flex; align-items: center; gap: var(--sp-1);
   width: 100%;
+  min-width: 0;
+  /* The row is exactly the pane's width; anything that still does not
+     fit is clipped here rather than escaping into the layout. */
+  overflow: hidden;
   padding: 3px 6px;
   border: none;
   border-radius: var(--radius-sm);
@@ -289,9 +302,16 @@ ul.sidebar__list {
 }
 .tree-item[data-dir="true"][aria-expanded="true"] .tree-item__chev { transform: rotate(90deg); }
 .tree-item[data-dir="false"] .tree-item__chev { visibility: hidden; }
-.tree-item__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-item__name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* See .tree-root__name — without this the name sets the row's minimum
+     width and a long file name runs past the edge of the explorer. */
+  min-width: 0;
+  flex: 1;
+}
 .tree-item--hidden .tree-item__name { color: var(--text-muted); font-style: italic; }
 
+.tree-group { min-width: 0; }
 .tree-group[hidden] { display: none; }
 .tree-empty { padding: var(--sp-2); color: var(--text-muted); font-size: var(--size-sm); }
 
