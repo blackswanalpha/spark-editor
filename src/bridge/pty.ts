@@ -442,6 +442,53 @@ export function encodeArrow(dir: "up" | "down", applicationCursor: boolean): str
   return applicationCursor ? `${SS3}${final}` : `${CSI}${final}`;
 }
 
+/** A mouse button press, drag or release, for a program that asked. */
+export interface ButtonReport {
+  /** 0 = left, 1 = middle, 2 = right. */
+  button: number;
+  /** 0-based cell under the pointer. */
+  col: number;
+  row: number;
+  kind: "press" | "release" | "motion";
+  shift: boolean;
+  alt: boolean;
+  ctrl: boolean;
+}
+
+/**
+ * Encode a button event as an xterm mouse report.
+ *
+ * Without this a click inside a full-screen program did nothing at all:
+ * the surface declined to select (the program owns the pointer) and had
+ * nothing to hand the program either, so menus and buttons in a TUI were
+ * unreachable with the mouse.
+ *
+ * Legacy encoding has no way to say *which* button was released — every
+ * release is button 3 — which is exactly why SGR exists and why any
+ * program that cares asks for it.
+ */
+export function encodeMouseButton(e: ButtonReport, encoding: PtyMouseEncoding): string {
+  const mods = (e.shift ? 4 : 0) + (e.alt ? 8 : 0) + (e.ctrl ? 16 : 0);
+  const motion = e.kind === "motion" ? 32 : 0;
+  const base = Math.max(0, Math.min(2, e.button));
+  const col = Math.max(0, e.col) + 1;
+  const row = Math.max(0, e.row) + 1;
+
+  if (encoding === "sgr") {
+    // SGR keeps the button on release and marks it with a final `m`.
+    const button = base + mods + motion;
+    return `${CSI}<${button};${col};${row}${e.kind === "release" ? "m" : "M"}`;
+  }
+
+  const button = (e.kind === "release" ? 3 : base) + mods + motion;
+  // See encodeWheelMouse: the legacy forms offset every field by 32 and
+  // this report crosses IPC as UTF-8, so the coordinates are clamped to
+  // stay one byte wide.
+  const cap = encoding === "utf8" ? 2015 : 95;
+  const cell = (v: number) => String.fromCharCode(32 + Math.min(v, cap));
+  return `${CSI}M${String.fromCharCode(32 + button)}${cell(col)}${cell(row)}`;
+}
+
 export interface WheelReport {
   up: boolean;
   /** 0-based cell under the pointer. */

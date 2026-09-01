@@ -5,7 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@bridge/commands", () => ({ isTauri: false }));
 
-import { clipboardIntent, encodeKey, encodePaste, type KeyContext } from "./pty";
+import {
+  clipboardIntent,
+  encodeKey,
+  encodeMouseButton,
+  encodePaste,
+  type KeyContext,
+} from "./pty";
 
 const NORMAL: KeyContext = { applicationCursor: false };
 const APP: KeyContext = { applicationCursor: true };
@@ -205,5 +211,47 @@ describe("encodePaste — bracketed paste cannot be escaped", () => {
   it("leaves the payload alone when the program is not bracketing", () => {
     // Nothing to break out of, and a terminal must carry escape codes.
     expect(encodePaste("ls\x1b[201~", false)).toBe("ls\x1b[201~");
+  });
+});
+
+describe("encodeMouseButton", () => {
+  const at = (over: Partial<Parameters<typeof encodeMouseButton>[0]> = {}) => ({
+    button: 0,
+    col: 4,
+    row: 2,
+    kind: "press" as const,
+    shift: false,
+    alt: false,
+    ctrl: false,
+    ...over,
+  });
+
+  it("reports a press and a release in SGR, keeping the button on release", () => {
+    // SGR marks a release with a final `m`; the legacy form cannot say
+    // which button was released at all, which is why programs ask for it.
+    expect(encodeMouseButton(at(), "sgr")).toBe("\x1b[<0;5;3M");
+    expect(encodeMouseButton(at({ kind: "release" }), "sgr")).toBe("\x1b[<0;5;3m");
+    expect(encodeMouseButton(at({ button: 2 }), "sgr")).toBe("\x1b[<2;5;3M");
+  });
+
+  it("adds the motion bit for a drag", () => {
+    expect(encodeMouseButton(at({ kind: "motion" }), "sgr")).toBe("\x1b[<32;5;3M");
+  });
+
+  it("carries the modifier bits", () => {
+    expect(encodeMouseButton(at({ shift: true }), "sgr")).toBe("\x1b[<4;5;3M");
+    expect(encodeMouseButton(at({ ctrl: true, alt: true }), "sgr")).toBe("\x1b[<24;5;3M");
+  });
+
+  it("uses button 3 for any release in the legacy encoding", () => {
+    expect(encodeMouseButton(at(), "default")).toBe(`\x1b[M${" "}%#`);
+    expect(encodeMouseButton(at({ kind: "release" }), "default")).toBe("\x1b[M#%#");
+  });
+
+  it("clamps legacy coordinates so the report stays six bytes", () => {
+    // Past 95 a coordinate would encode as two UTF-8 bytes and desync
+    // the program's mouse parser.
+    const report = encodeMouseButton(at({ col: 400, row: 400 }), "default");
+    expect(report).toHaveLength(6);
   });
 });

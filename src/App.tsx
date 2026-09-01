@@ -558,6 +558,12 @@ function Shell() {
             className="app__sidebar-reveal"
             aria-label="Show explorer"
             title="Show explorer (Ctrl+B)"
+            /* The button sits inside the resize handle, whose
+               pointerdown starts a drag and captures the pointer — which
+               retargets everything that follows away from the button, so
+               its click never arrived and "show explorer" did nothing.
+               Keep the press to the button. */
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={() => sidebar.setCollapsed(false)}
           >
             <Icon name="sidebar-toggle" size={14} />

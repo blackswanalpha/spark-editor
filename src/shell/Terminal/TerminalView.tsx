@@ -19,6 +19,7 @@ import {
   clipboardIntent,
   encodeArrow,
   encodeKey,
+  encodeMouseButton,
   encodePaste,
   encodeWheelMouse,
   onPtyExit,
@@ -104,6 +105,8 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
   const [scrolledBack, setScrolledBack] = useState(0);
   const [scrollMax, setScrollMax] = useState(0);
   const [selection, setSelection] = useState<Selection | null>(null);
+  /** When a key we cancelled the default of was last handled — see onBlur. */
+  const handledKeyAtRef = useRef(0);
 
   const sessionRef = useRef<string | null>(null);
   const modesRef = useRef({
@@ -499,6 +502,8 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
      which WebKit reports as 0 for pointer events. */
   const selectingRef = useRef(false);
   const clickRef = useRef({ time: 0, row: -1, col: -1, count: 0 });
+  /** Button currently held down and being reported to the program. */
+  const mouseDownRef = useRef<number | null>(null);
 
   const pointAt = useCallback(
     (clientX: number, clientY: number, edge: "round" | "floor" = "round") => {
@@ -525,8 +530,36 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
 
       /* A program that asked for mouse reporting owns the pointer: a
          click is a click for it, not a selection for us. Shift is the
-         standard override, which is how you select text inside vim. */
-      if (modesRef.current.mouseMode !== "none" && !e.shiftKey) return;
+         standard override, which is how you select text inside vim.
+
+         The click still has to be HANDED to the program. Returning here
+         without doing that — which is what used to happen — left a
+         full-screen program unclickable and, because selection was
+         declined too, made copy impossible in exactly the applications
+         people most want to copy out of. */
+      const modes = modesRef.current;
+      if (modes.mouseMode !== "none" && !e.shiftKey) {
+        e.preventDefault();
+        screenRef.current?.focus({ preventScroll: true });
+        const at = pointAt(e.clientX, e.clientY, "floor");
+        mouseDownRef.current = e.button;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        send(
+          encodeMouseButton(
+            {
+              button: e.button,
+              col: at.col,
+              row: at.row,
+              kind: "press",
+              shift: e.shiftKey,
+              alt: e.altKey,
+              ctrl: e.ctrlKey,
+            },
+            modes.mouseEncoding,
+          ),
+        );
+        return;
+      }
 
       e.preventDefault();
       screenRef.current?.focus({ preventScroll: true });
@@ -558,6 +591,29 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
 
   const onScreenPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      const held = mouseDownRef.current;
+      if (held !== null) {
+        // Only 1002/1003 asked to hear about movement; 1000 did not, and
+        // flooding it with reports it never requested confuses it.
+        const modes = modesRef.current;
+        if (modes.mouseMode !== "buttonMotion" && modes.mouseMode !== "anyMotion") return;
+        const at = pointAt(e.clientX, e.clientY, "floor");
+        send(
+          encodeMouseButton(
+            {
+              button: held,
+              col: at.col,
+              row: at.row,
+              kind: "motion",
+              shift: e.shiftKey,
+              alt: e.altKey,
+              ctrl: e.ctrlKey,
+            },
+            modes.mouseEncoding,
+          ),
+        );
+        return;
+      }
       if (!selectingRef.current) return;
       const at = pointAt(e.clientX, e.clientY);
       setSelection((prev) =>
@@ -569,15 +625,41 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     [pointAt],
   );
 
-  const endSelecting = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!selectingRef.current) return;
-    selectingRef.current = false;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* already released */
-    }
-  }, []);
+  const endSelecting = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const held = mouseDownRef.current;
+      if (held !== null) {
+        mouseDownRef.current = null;
+        const modes = modesRef.current;
+        // DEC 9 (press) reports presses only — it never wants a release.
+        if (modes.mouseMode !== "none" && modes.mouseMode !== "press") {
+          const at = pointAt(e.clientX, e.clientY, "floor");
+          send(
+            encodeMouseButton(
+              {
+                button: held,
+                col: at.col,
+                row: at.row,
+                kind: "release",
+                shift: e.shiftKey,
+                alt: e.altKey,
+                ctrl: e.ctrlKey,
+              },
+              modes.mouseEncoding,
+            ),
+          );
+        }
+      }
+      if (!selectingRef.current) return;
+      selectingRef.current = false;
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
+    },
+    [pointAt, send],
+  );
 
   /* ---------- Keyboard ---------- */
 
@@ -624,6 +706,7 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
       if (bytes === null) return;
       e.preventDefault();
       e.stopPropagation();
+      handledKeyAtRef.current = Date.now();
       // Typing scrolls the host back to the live bottom, so the selection
       // would be pointing at rows that are no longer on screen.
       if (selection) setSelection(null);
@@ -750,7 +833,22 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={() => {
+            setFocused(false);
+            /* Tab and Shift+Tab are focus-navigation keys to the engine
+               before they are anything else, and WebKitGTK moves focus on
+               them even when the keydown's default was cancelled. The
+               terminal has already sent the key to the shell at that
+               point, so the only visible effect is the keyboard silently
+               leaving the terminal — and the NEXT keystroke going
+               nowhere. Losing focus within a moment of a key we handled
+               is that, not a deliberate move, so take it back. */
+            if (Date.now() - handledKeyAtRef.current > 150) return;
+            const el = screenRef.current;
+            window.setTimeout(() => {
+              if (el?.isConnected) el.focus({ preventScroll: true });
+            }, 0);
+          }}
           onPointerDown={onScreenPointerDown}
           onPointerMove={onScreenPointerMove}
           onPointerUp={endSelecting}

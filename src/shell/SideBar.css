@@ -8,8 +8,14 @@
 .sidebar {
   display: flex;
   flex-direction: column;
-  width: 260px;
-  min-width: 200px;
+  /* Fill the pane. This used to be a hard `width: 260px` with a 200px
+     floor, which in a column flex container is the CROSS axis — so the
+     explorer's content stayed 260px wide no matter where the resize
+     handle was dragged. The pane's boundary moved and its contents did
+     not follow it, which is what made resizing look like it overshot.
+     The width the user drags lives on .app__sidebar; this fills it. */
+  width: 100%;
+  min-width: 0;
   height: 100%;
   flex: 1;
   background: var(--surface-2);
