@@ -21,6 +21,7 @@ import {
   type TerminalSession,
 } from "@shell/Terminal/sessions";
 import type { PtyPrivilege } from "@bridge/pty";
+import type { TerminalStatus } from "@shell/Terminal/TerminalView";
 
 /** Floating panel geometry. Lives here rather than in TerminalDialog's
     local state so it can be captured into the project workspace. */
@@ -37,12 +38,18 @@ interface TerminalState {
   activeId: string | null;
   /** Name for the next tab. Never decremented, so names are not reused. */
   nextOrdinal: number;
+  /** What each session's shell is doing, as its view last reported. */
+  statuses: Record<string, TerminalStatus>;
   /** Panel pinned to the mobile viewport from Settings → Terminal. */
   mobile: boolean;
   /** Floating panel position and size. */
   panel: PanelRect;
   /** False until the panel has placed itself for the first time. */
   panelPlaced: boolean;
+  /** The panel is showing what a workspace restore put back and nobody
+      has touched it yet: its surfaces must not take the keyboard off the
+      editor at boot. Any user-driven transition ends it. */
+  restoredOpen: boolean;
 
   open: () => void;
   close: () => void;
@@ -58,41 +65,69 @@ interface TerminalState {
   setPrivilege: (id: string, p: PtyPrivilege) => void;
   restartSession: (id: string) => void;
   setSessionTitle: (id: string, title: string | null) => void;
+  setStatus: (id: string, status: TerminalStatus) => void;
   setMobile: (m: boolean) => void;
   setPanelRect: (patch: Partial<PanelRect>, placed?: boolean) => void;
   /** Rebuild the tab list from a persisted workspace. */
   restoreTabs: (tabs: RestoredTab[], activeIndex: number, nextOrdinal: number, isOpen: boolean) => void;
+  /** Drop every session and close the panel — leaving a project. */
+  reset: () => void;
 }
 
 const defaultPrivilege = () => getSettings().terminal.defaultPrivilege;
+
+/** A shell that can still take input. */
+const isLive = (status: TerminalStatus | undefined) =>
+  !status || status.phase === "starting" || status.phase === "running";
+
+/** Drop the status of every session that is gone, or the map grows for
+    the life of the window. */
+function pruneStatuses(
+  statuses: Record<string, TerminalStatus>,
+  sessions: TerminalSession[],
+): Record<string, TerminalStatus> {
+  const live = new Set(sessions.map((s) => s.id));
+  const keys = Object.keys(statuses);
+  if (keys.every((k) => live.has(k))) return statuses;
+  const next: Record<string, TerminalStatus> = {};
+  for (const k of keys) if (live.has(k)) next[k] = statuses[k];
+  return next;
+}
 
 export const useTerminal = create<TerminalState>((set) => ({
   isOpen: false,
   sessions: [],
   activeId: null,
   nextOrdinal: 1,
+  statuses: {},
   mobile: false,
   panel: { ...DEFAULT_PANEL },
   panelPlaced: false,
+  restoredOpen: false,
 
   // Opening does not spawn anything: the panel derives the cwd from the
   // explorer and calls ensureSession once it has one.
-  open: () => set({ isOpen: true }),
-  close: () => set({ isOpen: false }),
-  toggle: () => set((s) => ({ isOpen: !s.isOpen })),
+  open: () => set({ isOpen: true, restoredOpen: false }),
+  close: () => set({ isOpen: false, restoredOpen: false }),
+  toggle: () => set((s) => ({ isOpen: !s.isOpen, restoredOpen: false })),
 
   openAt: (cwd) =>
     set((s) => {
       // Clicking "Open in Terminal" on the same folder twice should land
-      // you back in that shell, not stack duplicate tabs.
-      const existing = findByCwd(s.sessions, cwd);
-      if (existing) return { isOpen: true, activeId: existing.id };
+      // you back in that shell, not stack duplicate tabs — unless that
+      // shell has exited, which is not a terminal to land in.
+      const existing = findByCwd(
+        s.sessions.filter((x) => isLive(s.statuses[x.id])),
+        cwd,
+      );
+      if (existing) return { isOpen: true, activeId: existing.id, restoredOpen: false };
       const session = createSession(cwd, defaultPrivilege(), s.nextOrdinal);
       return {
         isOpen: true,
         sessions: [...s.sessions, session],
         activeId: session.id,
         nextOrdinal: s.nextOrdinal + 1,
+        restoredOpen: false,
       };
     }),
 
@@ -114,6 +149,7 @@ export const useTerminal = create<TerminalState>((set) => ({
         sessions: [...s.sessions, session],
         activeId: session.id,
         nextOrdinal: s.nextOrdinal + 1,
+        restoredOpen: false,
       };
     }),
 
@@ -123,25 +159,40 @@ export const useTerminal = create<TerminalState>((set) => ({
       const sessions = removeSession(s.sessions, id);
       // The last tab closing closes the panel: an empty terminal panel is
       // just chrome around nothing.
-      return { sessions, activeId, isOpen: sessions.length > 0 };
+      return {
+        sessions,
+        activeId,
+        isOpen: sessions.length > 0,
+        statuses: pruneStatuses(s.statuses, sessions),
+        restoredOpen: false,
+      };
     }),
 
-  setActiveSession: (id) => set({ activeId: id }),
+  setActiveSession: (id) => set({ activeId: id, restoredOpen: false }),
 
   // Privilege is per session and keyed by the view, so flipping it
   // respawns that one shell and leaves the other tabs alone.
   setPrivilege: (id, privilege) =>
-    set((s) => ({ sessions: patchSession(s.sessions, id, { privilege }) })),
+    set((s) => ({ sessions: patchSession(s.sessions, id, { privilege }), restoredOpen: false })),
 
   restartSession: (id) =>
     set((s) => ({
       sessions: s.sessions.map((x) =>
         x.id === id ? { ...x, restartKey: x.restartKey + 1 } : x,
       ),
+      restoredOpen: false,
     })),
 
   setSessionTitle: (id, title) =>
     set((s) => ({ sessions: patchSession(s.sessions, id, { title }) })),
+
+  setStatus: (id, status) =>
+    set((s) => {
+      // Only for a session the panel still shows; a view tearing down after
+      // its tab closed must not resurrect an entry.
+      if (!s.sessions.some((x) => x.id === id) || s.statuses[id] === status) return {};
+      return { statuses: { ...s.statuses, [id]: status } };
+    }),
 
   setMobile: (mobile) => set({ mobile }),
 
@@ -156,7 +207,7 @@ export const useTerminal = create<TerminalState>((set) => ({
   // saved one. Every tab starts at restartKey 0 with a fresh shell:
   // scrollback is not persisted, only where the shell was rooted.
   restoreTabs: (tabs, activeIndex, nextOrdinal, isOpen) =>
-    set(() => {
+    set((s) => {
       const sessions = tabs.map((t, i) => ({
         ...createSession(t.cwd, t.privilege, i + 1),
         label: t.label,
@@ -167,7 +218,25 @@ export const useTerminal = create<TerminalState>((set) => ({
         activeId: sessions.length ? sessions[idx].id : null,
         nextOrdinal: Math.max(nextOrdinal, sessions.length + 1),
         isOpen: isOpen && sessions.length > 0,
+        restoredOpen: isOpen && sessions.length > 0,
+        // A restored tab that matches a live one by id and cwd keeps its
+        // view, so its status must survive too; the rest are stale.
+        statuses: pruneStatuses(s.statuses, sessions),
       };
+    }),
+
+  // Terminal tabs are part of a project's workspace, the same as its
+  // document tabs. Switching or closing a project used to leave the
+  // outgoing project's shells running, and the next autosave wrote them
+  // into the incoming project's snapshot.
+  reset: () =>
+    set({
+      sessions: [],
+      activeId: null,
+      nextOrdinal: 1,
+      statuses: {},
+      isOpen: false,
+      restoredOpen: false,
     }),
 }));
 

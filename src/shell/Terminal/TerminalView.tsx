@@ -24,6 +24,7 @@ import {
   encodeWheelMouse,
   onPtyExit,
   onPtyFrame,
+  ptyAdopt,
   ptyKill,
   ptyList,
   ptyRefresh,
@@ -68,7 +69,7 @@ const MULTI_CLICK_MS = 400;
 
 export type TerminalStatus =
   | { phase: "starting" }
-  | { phase: "running"; shell: string; privilege: PtyPrivilege }
+  | { phase: "running"; id: string; shell: string; privilege: PtyPrivilege }
   | { phase: "exited"; code: number; message?: string }
   | { phase: "failed"; message: string };
 
@@ -77,11 +78,34 @@ interface Props {
   privilege: PtyPrivilege;
   /** Bumping this restarts the session — used by the Root toggle. */
   restartKey?: number;
+  /** Attach to this live host session instead of spawning a shell. */
+  adopt?: string;
+  /** Take the keyboard when the surface comes into view. Off for a panel
+      restored open at boot, which must not pull focus off the editor. */
+  focusOnShow?: boolean;
   onStatus?: (s: TerminalStatus) => void;
   onTitle?: (title: string | null) => void;
 }
 
-export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle }: Props) {
+/* Sessions being handed to another window. A view unmounting normally
+   ends its shell; one whose session is listed here leaves it running for
+   the window that adopts it. Consumed by the unmount that finds it. */
+const handedOff = new Set<string>();
+
+/** Keep `id`'s shell alive through the next unmount of its view. */
+export function detachOnUnmount(id: string) {
+  handedOff.add(id);
+}
+
+export function TerminalView({
+  cwd,
+  privilege,
+  restartKey = 0,
+  adopt,
+  focusOnShow = true,
+  onStatus,
+  onTitle,
+}: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const screenRef = useRef<HTMLDivElement | null>(null);
 
@@ -105,8 +129,6 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
   const [scrolledBack, setScrolledBack] = useState(0);
   const [scrollMax, setScrollMax] = useState(0);
   const [selection, setSelection] = useState<Selection | null>(null);
-  /** When a key we cancelled the default of was last handled — see onBlur. */
-  const handledKeyAtRef = useRef(0);
 
   const sessionRef = useRef<string | null>(null);
   const modesRef = useRef({
@@ -131,9 +153,11 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
      ref keeps the session effect from tearing down the shell. */
   const onStatusRef = useRef(onStatus);
   const onTitleRef = useRef(onTitle);
+  const focusOnShowRef = useRef(focusOnShow);
   useEffect(() => {
     onStatusRef.current = onStatus;
     onTitleRef.current = onTitle;
+    focusOnShowRef.current = focusOnShow;
   });
 
   const publishStatus = useCallback((s: TerminalStatus) => {
@@ -162,7 +186,7 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     // terminal looks dead.
     if (!visibleRef.current) {
       visibleRef.current = true;
-      screenRef.current?.focus({ preventScroll: true });
+      if (focusOnShowRef.current) screenRef.current?.focus({ preventScroll: true });
     }
     const cols = Math.max(2, Math.floor(usableW / cell.width));
     const rows = Math.max(1, Math.floor(usableH / cell.height));
@@ -228,14 +252,24 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
 
     (async () => {
       try {
-        const session = await ptySpawn({
-          cwd,
-          rows: size.rows,
-          cols: size.cols,
-          privilege,
-        });
+        /* A tab moved here from another window brings its shell along:
+           take it over rather than start another. The host answers with
+           the session as it stands, and the resize below fits it to this
+           box. Adoption is a one-time transfer, so a restart spawns. */
+        const adopting = Boolean(adopt) && restartKey === 0;
+        const session = adopting
+          ? await ptyAdopt(adopt as string)
+          : await ptySpawn({
+              cwd,
+              rows: size.rows,
+              cols: size.cols,
+              privilege,
+            });
         if (disposed) {
-          void ptyKill(session.id).catch(() => {});
+          // A shell this effect started is its to end. One it was taking
+          // over is not: StrictMode runs this effect twice, and the first
+          // pass ending the shell would leave the second nothing to adopt.
+          if (!adopting) void ptyKill(session.id).catch(() => {});
           return;
         }
         spawnedId = session.id;
@@ -256,12 +290,17 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
         if (disposed) {
           uf();
           ue();
-          void ptyKill(session.id).catch(() => {});
+          if (!adopting) void ptyKill(session.id).catch(() => {});
           return;
         }
         unlistenFrame = uf;
         unlistenExit = ue;
-        publishStatus({ phase: "running", shell: session.shell, privilege: session.privilege });
+        publishStatus({
+          phase: "running",
+          id: session.id,
+          shell: session.shell,
+          privilege: session.privilege,
+        });
         void ptyRefresh(session.id).catch(() => {});
 
         /* A shell that died before the listener attached — a bad login
@@ -289,12 +328,13 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
       const id = spawnedId ?? sessionRef.current;
       if (id) {
         sessionRef.current = null;
+        if (handedOff.delete(id)) return;
         void ptyKill(id).catch(() => {});
       }
     };
     // Size is read at spawn time only; later changes go through pty_resize.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cwd, privilege, restartKey, publishStatus, applyFrame]);
+  }, [cwd, privilege, restartKey, adopt, publishStatus, applyFrame]);
 
   /* ---------- Push size changes to the host ---------- */
 
@@ -308,57 +348,6 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     setSelection(null);
     void ptyResize(id, size.rows, size.cols).catch(() => {});
   }, [size.rows, size.cols, status.phase]);
-
-  /* ---------- Holding the keyboard ----------
-
-     Tab and Shift+Tab are focus-navigation keys to the engine before
-     they are anything else, and WebKitGTK traverses on them even when
-     the key press's default is cancelled. The bytes still reach the
-     shell, but the keyboard lands on whatever tab stop is next — in
-     practice the panel's own Restart button — and the keystroke after
-     that goes nowhere.
-
-     `preventDefault` is the correct fix and it is not honoured, so the
-     only remaining lever is the tab order itself: while the shell holds
-     the keyboard, nothing else inside the terminal panel (or the
-     pop-out window) is a tab stop. Everything is restored the moment
-     the surface loses focus, so the controls stay keyboard-reachable
-     whenever you are not typing into a shell. The blur recovery below
-     covers the traversal that escapes the panel entirely.
-  */
-  useEffect(() => {
-    if (!focused) return;
-    const root = screenRef.current?.closest(".term, .term-standalone");
-    if (!(root instanceof HTMLElement)) return;
-
-    const suppressed = new Map<HTMLElement, string | null>();
-
-    const suppress = () => {
-      const candidates = root.querySelectorAll<HTMLElement>(
-        'a[href], button, input, select, textarea, [tabindex]',
-      );
-      for (const el of candidates) {
-        if (el === screenRef.current || suppressed.has(el)) continue;
-        if (el.tabIndex < 0) continue;
-        suppressed.set(el, el.getAttribute("tabindex"));
-        el.setAttribute("tabindex", "-1");
-      }
-    };
-
-    suppress();
-    // Tabs, the scrollback button and the root toggle come and go while
-    // the shell has focus; a new one must not reintroduce a tab stop.
-    const observer = new MutationObserver(suppress);
-    observer.observe(root, { childList: true, subtree: true });
-
-    return () => {
-      observer.disconnect();
-      for (const [el, previous] of suppressed) {
-        if (previous === null) el.removeAttribute("tabindex");
-        else el.setAttribute("tabindex", previous);
-      }
-    };
-  }, [focused]);
 
   /* ---------- Input ----------
 
@@ -712,7 +701,14 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
     [pointAt, send],
   );
 
-  /* ---------- Keyboard ---------- */
+  /* ---------- Keyboard ----------
+
+     Tab and Shift+Tab are focus-navigation keys to the engine before they
+     are anything else. Cancelling the keydown's default is what keeps the
+     keyboard on the terminal, and it only works when the encoder actually
+     recognises the press: see `keyOf` in bridge/pty.ts for the WebKitGTK
+     Shift+Tab case, which used to arrive unnamed, go unhandled, and move
+     focus to the panel's Restart button. */
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -757,7 +753,6 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
       if (bytes === null) return;
       e.preventDefault();
       e.stopPropagation();
-      handledKeyAtRef.current = Date.now();
       // Typing scrolls the host back to the live bottom, so the selection
       // would be pointing at rows that are no longer on screen.
       if (selection) setSelection(null);
@@ -884,22 +879,7 @@ export function TerminalView({ cwd, privilege, restartKey = 0, onStatus, onTitle
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           onFocus={() => setFocused(true)}
-          onBlur={() => {
-            setFocused(false);
-            /* Tab and Shift+Tab are focus-navigation keys to the engine
-               before they are anything else, and WebKitGTK moves focus on
-               them even when the keydown's default was cancelled. The
-               terminal has already sent the key to the shell at that
-               point, so the only visible effect is the keyboard silently
-               leaving the terminal — and the NEXT keystroke going
-               nowhere. Losing focus within a moment of a key we handled
-               is that, not a deliberate move, so take it back. */
-            if (Date.now() - handledKeyAtRef.current > 150) return;
-            const el = screenRef.current;
-            window.setTimeout(() => {
-              if (el?.isConnected) el.focus({ preventScroll: true });
-            }, 0);
-          }}
+          onBlur={() => setFocused(false)}
           onPointerDown={onScreenPointerDown}
           onPointerMove={onScreenPointerMove}
           onPointerUp={endSelecting}

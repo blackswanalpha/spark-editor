@@ -483,6 +483,7 @@ pub fn run() {
             pty::pty_refresh,
             pty::pty_scroll,
             pty::pty_kill,
+            pty::pty_adopt,
             pty::pty_list,
             pty::pty_root_support,
             pty::pty_default_shell,
@@ -495,14 +496,17 @@ pub fn run() {
             // Closing the main window must not leave orphaned shells
             // holding the app alive in the background.
             if let tauri::WindowEvent::Destroyed = event {
+                let handle = window.app_handle();
                 if window.label() == "main" {
-                    let handle = window.app_handle();
                     if let Some(manager) = handle.try_state::<pty::PtyManager>() {
                         pty::shutdown_all(&manager);
                     }
                     if let Some(manager) = handle.try_state::<watch::WatchManager>() {
                         watch::shutdown_all(&manager);
                     }
+                } else if let Some(manager) = handle.try_state::<pty::PtyManager>() {
+                    // A pop-out terminal closing takes only its own shells.
+                    pty::shutdown_window(&manager, window.label());
                 }
             }
         })
