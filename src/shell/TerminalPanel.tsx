@@ -25,13 +25,13 @@
    ============================================================ */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@ui/Icon";
-import { useExplorer } from "@store/explorer";
+import { useExplorer, directoryOf } from "@store/explorer";
 import { useDocs } from "@store/documents";
-import { useTerminal } from "@store/terminal";
+import { useTerminal, type RestoredTab } from "@store/terminal";
 import { useSettings } from "@store/settings";
 import { isTauri } from "@bridge/commands";
 import { ptyRootSupport, type PtyPrivilege, type RootSupport } from "@bridge/pty";
-import { TerminalView, type TerminalStatus } from "./Terminal/TerminalView";
+import { TerminalView, detachOnUnmount, type TerminalStatus } from "./Terminal/TerminalView";
 import {
   createSession,
   closeSession as removeSession,
@@ -66,7 +66,7 @@ function useNewTerminalCwd(): string {
   });
 
   return useMemo(() => {
-    if (selected) return children.has(selected) ? selected : dirOf(selected);
+    if (selected) return directoryOf(children, selected);
     if (activePath) return dirOf(activePath);
     if (root) return root;
     return "/";
@@ -75,6 +75,12 @@ function useNewTerminalCwd(): string {
 
 const MIN_W = 380;
 const MIN_H = 220;
+
+/** One tab as handed to the pop-out window in its URL. */
+export interface PoppedTab extends RestoredTab {
+  /** Live host session to adopt; absent when the shell had ended. */
+  adopt?: string;
+}
 
 /* Chrome the mobile preset has to sit inside, measured from the CSS:
    header + tab strip + footer + the holder's own padding, and the
@@ -114,6 +120,60 @@ function SessionTabs({
     countRef.current = sessions.length;
   }, [sessions.length]);
 
+  const focusTab = useCallback((id: string) => {
+    stripRef.current?.querySelector<HTMLElement>(`[id="term-tab-${id}"]`)?.focus();
+  }, []);
+
+  /* Only the active tab is a tab stop (roving tabindex), so the arrows
+     are the only way to reach the others from the keyboard. And once a
+     tab's own close button is gone the keyboard lands on the body; put
+     it on whichever tab took over instead. A surface holding focus is
+     left alone — it is the user typing. */
+  const seenRef = useRef<{ activeId: string | null; count: number } | null>(null);
+  useEffect(() => {
+    const seen = seenRef.current;
+    seenRef.current = { activeId, count: sessions.length };
+    // Only a change moves the keyboard: the strip mounting at boot must
+    // not pull it anywhere.
+    if (!seen || !activeId || (seen.activeId === activeId && seen.count === sessions.length)) return;
+    const focus = document.activeElement;
+    const strip = stripRef.current;
+    if (focus === document.body || (strip && focus && strip.contains(focus))) focusTab(activeId);
+  }, [activeId, sessions.length, focusTab]);
+
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, id: string) => {
+    const idx = sessions.findIndex((s) => s.id === id);
+    let target: TerminalSession | undefined;
+    switch (e.key) {
+      case "Enter":
+      case " ":
+        target = sessions[idx];
+        break;
+      case "ArrowRight":
+        target = sessions[(idx + 1) % sessions.length];
+        break;
+      case "ArrowLeft":
+        target = sessions[(idx - 1 + sessions.length) % sessions.length];
+        break;
+      case "Home":
+        target = sessions[0];
+        break;
+      case "End":
+        target = sessions[sessions.length - 1];
+        break;
+      case "Delete":
+        e.preventDefault();
+        onClose(id);
+        return;
+      default:
+        return;
+    }
+    e.preventDefault();
+    if (!target) return;
+    onSelect(target.id);
+    focusTab(target.id);
+  };
+
   return (
     <div className="term__tabs">
       <div className="term__tabList" role="tablist" aria-label="Terminal sessions" ref={stripRef}>
@@ -133,12 +193,7 @@ function SessionTabs({
               aria-controls={`term-panel-${s.id}`}
               title={sessionTooltip(s)}
               onClick={() => onSelect(s.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onSelect(s.id);
-                }
-              }}
+              onKeyDown={(e) => onTabKeyDown(e, s.id)}
               onAuxClick={(e) => {
                 // Middle-click closes, as it does on the editor's own tabs.
                 if (e.button === 1) {
@@ -192,12 +247,15 @@ function SessionSurfaces({
   sessions,
   activeId,
   holderClass,
+  focusOnShow = true,
   onStatus,
   onTitle,
 }: {
   sessions: TerminalSession[];
   activeId: string | null;
   holderClass: string;
+  /** See TerminalView: off while the panel is showing what a restore put back. */
+  focusOnShow?: boolean;
   onStatus: (id: string, s: TerminalStatus) => void;
   onTitle: (id: string, t: string | null) => void;
 }) {
@@ -219,6 +277,9 @@ function SessionSurfaces({
             key={`${s.cwd}::${s.privilege}::${s.restartKey}`}
             cwd={s.cwd}
             privilege={s.privilege}
+            restartKey={s.restartKey}
+            adopt={s.adopt}
+            focusOnShow={focusOnShow}
             onStatus={(st) => onStatus(s.id, st)}
             onTitle={(t) => onTitle(s.id, t)}
           />
@@ -264,6 +325,8 @@ export function TerminalDialog({
   const setPrivilege = useTerminal((s) => s.setPrivilege);
   const restartSession = useTerminal((s) => s.restartSession);
   const setSessionTitle = useTerminal((s) => s.setSessionTitle);
+  const statuses = useTerminal((s) => s.statuses);
+  const setStatus = useTerminal((s) => s.setStatus);
   const mobileW = useSettings((s) => s.settings.terminal.mobileWidth);
   const mobileH = useSettings((s) => s.settings.terminal.mobileHeight);
 
@@ -293,13 +356,17 @@ export function TerminalDialog({
     [],
   );
 
-  const [statuses, setStatuses] = useState<Record<string, TerminalStatus>>({});
   const [rootSupport, setRootSupport] = useState<RootSupport | null>(null);
   const [popping, setPopping] = useState(false);
 
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
+
+  /* A panel the workspace restore opened must not take the keyboard off
+     the editor at boot; the store clears this on the first thing the user
+     does to the panel. */
+  const restoredOpen = useTerminal((s) => s.restoredOpen);
 
   /* The panel opens before it knows where to spawn; the cwd derivation is
      a hook, so the first session is created here rather than in the store. */
@@ -375,22 +442,10 @@ export function TerminalDialog({
     };
   }, [open]);
 
-  /* Drop the status of a session that is gone, or the map grows for the
-     life of the window. */
-  useEffect(() => {
-    setStatuses((prev) => {
-      const live = new Set(sessions.map((s) => s.id));
-      const keys = Object.keys(prev);
-      if (keys.every((k) => live.has(k))) return prev;
-      const next: Record<string, TerminalStatus> = {};
-      for (const k of keys) if (live.has(k)) next[k] = prev[k];
-      return next;
-    });
-  }, [sessions]);
-
-  const onStatus = useCallback((id: string, s: TerminalStatus) => {
-    setStatuses((prev) => (prev[id] === s ? prev : { ...prev, [id]: s }));
-  }, []);
+  const onStatus = useCallback(
+    (id: string, s: TerminalStatus) => setStatus(id, s),
+    [setStatus],
+  );
 
   const onTitle = useCallback(
     (id: string, t: string | null) => setSessionTitle(id, t),
@@ -475,10 +530,13 @@ export function TerminalDialog({
     }));
   }, [mobile, setMobile, mobileW, mobileH, setPos]);
 
-  /* Pop out into a real OS window. The sessions live in the Rust host, so
-     the new window opens its own — no state has to be handed across, and
-     unlike the old Picture-in-Picture/popup fallbacks there is nothing to
-     keep in sync or leak. */
+  /* Pop out into a real OS window. The shells live in the Rust host, so
+     the panel's tabs MOVE: each running one is adopted by the new window
+     (whatever it is running keeps running), a tab whose shell has ended
+     is respawned there, and the panel gives them all up — it used to
+     keep the sessions in the store and respawn the lot the next time it
+     opened, so both windows held shells and every running program died
+     on the way across. */
   const popOut = useCallback(async () => {
     if (!isTauri || popping) return;
     setPopping(true);
@@ -490,11 +548,22 @@ export function TerminalDialog({
         return;
       }
       const cwd = active?.cwd ?? newCwd;
+      const moving: PoppedTab[] = sessions.map((s) => {
+        const st = statuses[s.id];
+        return {
+          cwd: s.cwd,
+          privilege: s.privilege,
+          label: s.label,
+          adopt: st?.phase === "running" ? st.id : undefined,
+        };
+      });
       const params = new URLSearchParams({
         terminal: "1",
         cwd,
         privilege: active?.privilege ?? "user",
         mobile: mobile ? "1" : "0",
+        tabs: JSON.stringify(moving),
+        active: String(Math.max(0, sessions.findIndex((s) => s.id === activeId))),
       });
       const options = {
         url: `index.html?${params.toString()}`,
@@ -526,8 +595,10 @@ export function TerminalDialog({
         // cost you the z-order, not the terminal.
         await spawn();
       }
-      // The panel and the OS window would otherwise both hold shells.
-      onOpenChange(false);
+      // The window exists; from here the shells are its. Unmounting the
+      // views would end them, so mark each one as leaving first.
+      for (const tab of moving) if (tab.adopt) detachOnUnmount(tab.adopt);
+      useTerminal.getState().reset();
     } catch (err) {
       window.dispatchEvent(
         new CustomEvent("spark:toast:error", {
@@ -540,7 +611,7 @@ export function TerminalDialog({
     } finally {
       setPopping(false);
     }
-  }, [active, newCwd, popping, size.w, size.h, onOpenChange, mobile, mobileW, mobileH]);
+  }, [active, activeId, sessions, statuses, newCwd, popping, size.w, size.h, mobile, mobileW, mobileH]);
 
   const isRoot = active?.privilege === "root";
   const rootBlocked = rootSupport != null && !rootSupport.available;
@@ -663,6 +734,7 @@ export function TerminalDialog({
         sessions={sessions}
         activeId={activeId}
         holderClass="term__holder"
+        focusOnShow={!restoredOpen}
         onStatus={onStatus}
         onTitle={onTitle}
       />
@@ -710,10 +782,15 @@ export function TerminalStandaloneInner({
   cwd,
   privilege = "user",
   initialMobile = false,
+  tabs,
+  activeIndex = 0,
 }: {
   cwd: string;
   privilege?: PtyPrivilege;
   initialMobile?: boolean;
+  /** The panel's tabs, when this window was popped out of it. */
+  tabs?: PoppedTab[];
+  activeIndex?: number;
 }) {
   /* One state object rather than three: adding and closing a tab move the
      list, the focus and the ordinal together, and splitting them meant
@@ -724,8 +801,14 @@ export function TerminalStandaloneInner({
     activeId: string | null;
     nextOrdinal: number;
   }>(() => {
-    const first = createSession(cwd, privilege, 1);
-    return { sessions: [first], activeId: first.id, nextOrdinal: 2 };
+    const seed: PoppedTab[] = tabs?.length ? tabs : [{ cwd, privilege, label: "Terminal 1" }];
+    const sessions = seed.map((t, i) => ({
+      ...createSession(t.cwd, t.privilege, i + 1),
+      label: t.label,
+      adopt: t.adopt,
+    }));
+    const idx = activeIndex >= 0 && activeIndex < sessions.length ? activeIndex : 0;
+    return { sessions, activeId: sessions[idx].id, nextOrdinal: sessions.length + 1 };
   });
   const { sessions, activeId } = state;
 

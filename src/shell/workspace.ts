@@ -197,7 +197,9 @@ export async function restoreWorkspace(ws: Workspace): Promise<RestoreResult> {
     }
 
     /* 4. Terminal. The renderer has no PTY outside Tauri, so restoring
-          tabs in a browser preview would only paint dead chrome. */
+          tabs in a browser preview would only paint dead chrome. A
+          snapshot with no tabs still replaces whatever is open: those
+          shells belong to the project being left, not this one. */
     if (isTauri && ws.terminal.tabs.length) {
       useTerminal
         .getState()
@@ -207,6 +209,8 @@ export async function restoreWorkspace(ws: Workspace): Promise<RestoreResult> {
           ws.terminal.nextOrdinal,
           ws.terminal.isOpen,
         );
+    } else {
+      useTerminal.getState().reset();
     }
     useTerminal.getState().setPanelRect(ws.terminal.panel, true);
     useTerminal.getState().setMobile(ws.terminal.mobile);

@@ -43,6 +43,8 @@ function resetStores() {
     mobile: false,
     panel: { ...DEFAULT_PANEL },
     panelPlaced: false,
+    restoredOpen: false,
+    statuses: {},
   });
   useProjects.setState({ version: SCHEMA_VERSION, activeId: null, projects: [], hydrated: false });
 }
@@ -246,6 +248,23 @@ describe("restoreWorkspace", () => {
     expect(t.mobile).toBe(true);
     // No PTY outside Tauri, so tabs are deliberately not recreated.
     expect(t.sessions).toEqual([]);
+  });
+
+  it("drops the previous project's shells when the incoming snapshot has none", async () => {
+    /* Switching projects closes every document tab but used to leave the
+       terminal sessions in place, and the next autosave wrote the old
+       project's shells into the new project's workspace. */
+    const t = useTerminal.getState();
+    t.open();
+    t.addSession("/old-project");
+    t.addSession("/old-project/src");
+    expect(useTerminal.getState().sessions).toHaveLength(2);
+
+    await restoreWorkspace({ ...EMPTY_WORKSPACE });
+
+    expect(useTerminal.getState().sessions).toEqual([]);
+    expect(useTerminal.getState().isOpen).toBe(false);
+    expect(captureWorkspace().terminal.tabs).toEqual([]);
   });
 
   it("pushes layout back through the bridge", async () => {

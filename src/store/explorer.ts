@@ -32,6 +32,20 @@ export interface ExplorerNode {
   isFile: boolean;
 }
 
+/**
+ * The directory a path stands for: itself when the tree knows it as a
+ * directory — listed, or named as one in its parent's listing — and its
+ * parent otherwise. Checking only for a listing treated every collapsed
+ * folder as a file, so terminals meant for it opened in its parent.
+ */
+export function directoryOf(children: Map<string, ExplorerNode[]>, path: string): string {
+  if (children.has(path)) return path;
+  const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  const parent = idx > 0 ? path.slice(0, idx) || "/" : "/";
+  const entry = children.get(parent)?.find((n) => n.path === path);
+  return entry?.isDir ? path : parent;
+}
+
 export interface FileChangeEvent {
   /** "bulk" carries no path: the host coalesced more changes than it was
    *  willing to send individually, and every cached listing is suspect. */

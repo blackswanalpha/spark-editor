@@ -8,6 +8,8 @@ beforeEach(() => {
     sessions: [],
     activeId: null,
     nextOrdinal: 1,
+    statuses: {},
+    restoredOpen: false,
     mobile: false,
     panel: { ...DEFAULT_PANEL },
     panelPlaced: false,
@@ -70,6 +72,83 @@ describe("restoreTabs", () => {
     useTerminal.getState().restoreTabs([{ cwd: "/a", privilege: "user", label: "Terminal 1" }], 0, 2, true);
     useTerminal.getState().ensureSession("/somewhere-else");
     expect(useTerminal.getState().sessions).toHaveLength(1);
+  });
+});
+
+describe("restoredOpen", () => {
+  it("is raised by a restore that opens the panel and dropped by the first user action", () => {
+    const t = useTerminal.getState();
+    t.restoreTabs([{ cwd: "/a", privilege: "user", label: "Terminal 1" }], 0, 2, true);
+    expect(useTerminal.getState().restoredOpen).toBe(true);
+    t.setActiveSession("term-1");
+    expect(useTerminal.getState().restoredOpen).toBe(false);
+  });
+
+  it("stays down when the restore leaves the panel closed", () => {
+    useTerminal.getState().restoreTabs([{ cwd: "/a", privilege: "user", label: "Terminal 1" }], 0, 2, false);
+    expect(useTerminal.getState().restoredOpen).toBe(false);
+  });
+});
+
+describe("openAt", () => {
+  it("lands on the live shell already at that directory", () => {
+    const t = useTerminal.getState();
+    t.addSession("/a");
+    t.addSession("/b");
+    t.openAt("/a");
+    const after = useTerminal.getState();
+    expect(after.sessions).toHaveLength(2);
+    expect(after.activeId).toBe("term-1");
+    expect(after.isOpen).toBe(true);
+  });
+
+  it("opens a new tab rather than landing on a shell that has exited", () => {
+    /* "Open in Terminal" on a folder whose only tab had `exit` typed into
+       it used to focus that dead tab, which cannot take a command. */
+    const t = useTerminal.getState();
+    t.addSession("/a");
+    t.setStatus("term-1", { phase: "exited", code: 0 });
+    t.openAt("/a");
+    const after = useTerminal.getState();
+    expect(after.sessions.map((s) => s.id)).toEqual(["term-1", "term-2"]);
+    expect(after.activeId).toBe("term-2");
+  });
+});
+
+describe("setStatus", () => {
+  it("records a status only for a session the panel still has", () => {
+    const t = useTerminal.getState();
+    t.addSession("/a");
+    t.setStatus("term-1", { phase: "starting" });
+    // A view tearing down after its tab closed reports once more.
+    t.setStatus("term-9", { phase: "exited", code: 0 });
+    expect(Object.keys(useTerminal.getState().statuses)).toEqual(["term-1"]);
+  });
+
+  it("forgets the status of a closed tab", () => {
+    const t = useTerminal.getState();
+    t.addSession("/a");
+    t.addSession("/b");
+    t.setStatus("term-1", { phase: "starting" });
+    t.setStatus("term-2", { phase: "starting" });
+    t.closeSession("term-1");
+    expect(Object.keys(useTerminal.getState().statuses)).toEqual(["term-2"]);
+  });
+});
+
+describe("reset", () => {
+  it("drops every session, closes the panel and restarts the ordinals", () => {
+    const t = useTerminal.getState();
+    t.addSession("/a");
+    t.addSession("/b");
+    t.reset();
+    const after = useTerminal.getState();
+    expect(after.sessions).toEqual([]);
+    expect(after.activeId).toBeNull();
+    expect(after.isOpen).toBe(false);
+    expect(after.nextOrdinal).toBe(1);
+    // The panel keeps its place: geometry is the user's, not the project's.
+    expect(after.panel).toEqual(t.panel);
   });
 });
 

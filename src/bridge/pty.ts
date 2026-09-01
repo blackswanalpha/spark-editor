@@ -124,6 +124,8 @@ export const ptyResize = (id: string, rows: number, cols: number) =>
   host<void>("pty_resize", { id, rows, cols });
 export const ptyRefresh = (id: string) => host<void>("pty_refresh", { id });
 export const ptyKill = (id: string) => host<void>("pty_kill", { id });
+/** Take over a live session from another window (the pop-out path). */
+export const ptyAdopt = (id: string) => host<PtySessionInfo>("pty_adopt", { id });
 export const ptyList = () => host<PtySessionInfo[]>("pty_list");
 export const ptyRootSupport = () => host<RootSupport>("pty_root_support");
 export const ptyDefaultShell = () => host<string>("pty_default_shell");
@@ -320,8 +322,25 @@ export function clipboardIntent(
  * Encode a key press as terminal input, or return `null` when the key
  * carries no bytes (a bare modifier, or a shortcut the UI handles).
  */
+/**
+ * The DOM `key` for a press, with the one WebKitGTK gap patched.
+ *
+ * Shift+Tab reaches GTK as the keysym `ISO_Left_Tab`, and WebKitGTK's
+ * keyval table only names `Tab` and `KP_Tab`, so the event arrives with
+ * `key: "Unidentified"` — while `code` is still "Tab" and the legacy
+ * `keyCode` is still 9. Dropped as IME noise, the press sent nothing and
+ * cancelled nothing, so the webview ran its own default for the key and
+ * moved focus to the previous tab stop. That is the "Shift+Tab is an app
+ * shortcut" report: it was never a shortcut, just an unhandled key.
+ */
+function keyOf(e: Pick<KeyboardEvent, "key" | "code" | "keyCode">): string {
+  if (e.key === "Unidentified" && (e.code === "Tab" || e.keyCode === 9)) return "Tab";
+  return e.key;
+}
+
 export function encodeKey(e: KeyboardEvent, ctx: KeyContext): string | null {
-  const { key, ctrlKey, altKey, metaKey, shiftKey } = e;
+  const { ctrlKey, altKey, metaKey, shiftKey } = e;
+  const key = keyOf(e);
 
   /* An IME is mid-composition: the characters it is assembling arrive
      later as one `input`/composition result, and forwarding the raw keys

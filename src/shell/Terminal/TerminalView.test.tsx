@@ -11,8 +11,19 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 /* `vi.mock` is hoisted above every top-level binding, so the spies have
    to live somewhere the factory can reach at call time rather than at
    definition time — `vi.hoisted` is that place. */
-const { ptyWrite, unlisten, frameHandlers } = vi.hoisted(() => ({
+const { ptyWrite, ptyKill, ptyAdopt, unlisten, frameHandlers } = vi.hoisted(() => ({
   ptyWrite: vi.fn(() => Promise.resolve()),
+  ptyKill: vi.fn(() => Promise.resolve()),
+  ptyAdopt: vi.fn((id: string) =>
+    Promise.resolve({
+      id,
+      shell: "/bin/zsh",
+      cwd: "/elsewhere",
+      privilege: "user" as const,
+      rows: 30,
+      cols: 100,
+    }),
+  ),
   unlisten: vi.fn(),
   frameHandlers: [] as ((f: unknown) => void)[],
 }));
@@ -58,9 +69,11 @@ vi.mock("@bridge/pty", async (importActual) => {
     ptyWrite,
     ptyResize: vi.fn(() => Promise.resolve()),
     ptyRefresh: vi.fn(() => Promise.resolve()),
-    ptyKill: vi.fn(() => Promise.resolve()),
+    ptyKill,
+    ptyAdopt,
     ptyScroll: vi.fn(() => Promise.resolve(0)),
-    ptyList: vi.fn(() => Promise.resolve([{ id: "pty-1" }])),
+    // Both the spawned id and the one the adoption test takes over.
+    ptyList: vi.fn(() => Promise.resolve([{ id: "pty-1" }, { id: "pty-7" }])),
     onPtyFrame: vi.fn((_id: string, handler: (f: unknown) => void) => {
       frameHandlers.push(handler);
       return Promise.resolve(unlisten);
@@ -69,7 +82,7 @@ vi.mock("@bridge/pty", async (importActual) => {
   };
 });
 
-import { TerminalView } from "./TerminalView";
+import { TerminalView, detachOnUnmount, type TerminalStatus } from "./TerminalView";
 
 /** Mount and wait for the session to reach "running". */
 async function mountTerminal() {
@@ -148,6 +161,21 @@ describe("TerminalView — keys reach the pty", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it("sends back-tab for Shift+Tab as WebKitGTK actually reports it", async () => {
+    /* The report from the running app. Shift+Tab is the keysym
+       ISO_Left_Tab, which WebKitGTK does not name: the press arrives with
+       `key: "Unidentified"` and only `code`/`keyCode` saying Tab. It was
+       dropped as IME noise, so nothing was sent AND nothing was cancelled,
+       and the webview moved focus to the previous tab stop — which looked
+       like an app shortcut eating the key. */
+    const surface = await mountTerminal();
+    const event = press(surface, { key: "Unidentified", code: "Tab", keyCode: 9, shiftKey: true });
+
+    expect(ptyWrite).toHaveBeenCalledWith("pty-1", "\x1b[Z");
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(surface);
+  });
+
   it("sends a plain tab for Tab", async () => {
     const surface = await mountTerminal();
     const event = press(surface, { key: "Tab" });
@@ -219,44 +247,22 @@ describe("TerminalView — a program that owns the mouse", () => {
   });
 });
 
-describe("TerminalView — focus survives a key the engine wants for navigation", () => {
+describe("TerminalView — focus follows the user", () => {
   beforeEach(() => {
     ptyWrite.mockClear();
     frameHandlers.length = 0;
   });
   afterEach(cleanup);
 
-  it("takes focus back when Shift+Tab traverses out of the terminal", async () => {
-    /* Reported from the running app: Shift+Tab moved focus to the
-       panel's Restart button. The bytes DO reach the shell — the surface
-       cancels the default — but WebKitGTK traverses anyway, so the
-       keyboard silently left the terminal and the next keystroke went
-       nowhere. */
+  it("does not fight a click away from the terminal, even right after a key", async () => {
+    /* The old focus-recovery hack yanked focus back to the terminal on any
+       blur within 150ms of a handled key — so typing a command and
+       clicking straight into the editor left the keyboard on the shell. */
     const surface = await mountTerminal();
     const elsewhere = document.createElement("button");
     document.body.appendChild(elsewhere);
 
-    press(surface, { key: "Tab", shiftKey: true });
-    expect(ptyWrite).toHaveBeenCalledWith("pty-1", "\x1b[Z");
-
-    // What the engine does next, against the surface's wishes.
-    act(() => {
-      elsewhere.focus();
-      surface.dispatchEvent(new FocusEvent("blur", { bubbles: false }));
-    });
-
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 5));
-    });
-    expect(document.activeElement).toBe(surface);
-  });
-
-  it("does not fight a deliberate click away from the terminal", async () => {
-    const surface = await mountTerminal();
-    const elsewhere = document.createElement("button");
-    document.body.appendChild(elsewhere);
-
-    // No key was handled just now, so this blur is the user's own doing.
+    press(surface, { key: "a" });
     act(() => {
       elsewhere.focus();
       surface.dispatchEvent(new FocusEvent("blur", { bubbles: false }));
@@ -269,51 +275,56 @@ describe("TerminalView — focus survives a key the engine wants for navigation"
   });
 });
 
-describe("TerminalView — the shell holds the keyboard", () => {
+describe("TerminalView — moving a shell between windows", () => {
   beforeEach(() => {
     ptyWrite.mockClear();
+    ptyKill.mockClear();
+    ptyAdopt.mockClear();
     frameHandlers.length = 0;
   });
   afterEach(cleanup);
 
-  /** The panel chrome the engine used to traverse into. */
-  function panelWithTerminal() {
-    const panel = document.createElement("div");
-    panel.className = "term term--floating";
-    const restart = document.createElement("button");
-    restart.textContent = "Restart";
-    panel.appendChild(restart);
-    // The surface mounts inside the panel, as it does in the real tree.
-    const mount = document.createElement("div");
-    panel.appendChild(mount);
-    document.body.appendChild(panel);
-    return { panel, restart, mount };
-  }
-
-  it("removes the panel's tab stops while the surface is focused", async () => {
-    /* Reported from the running app: Shift+Tab moved focus onto the
-       panel's Restart button. preventDefault is the correct fix and
-       WebKitGTK does not honour it, so the tab order is the only lever
-       left. */
-    const { panel, restart, mount } = panelWithTerminal();
-    render(<TerminalView cwd="/tmp" privilege="user" />, { container: mount });
-    await act(async () => {
+  const settle = () =>
+    act(async () => {
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    const surface = panel.querySelector<HTMLElement>(".tv__screen")!;
-    expect(restart.tabIndex).toBe(0);
+  it("adopts a live session instead of spawning, and reports it running", async () => {
+    const statuses: TerminalStatus[] = [];
+    render(<TerminalView cwd="/tmp" privilege="user" adopt="pty-7" onStatus={(s) => statuses.push(s)} />);
+    await settle();
 
+    expect(ptyAdopt).toHaveBeenCalledWith("pty-7");
+    const running = statuses.find((s) => s.phase === "running");
+    expect(running).toMatchObject({ phase: "running", id: "pty-7", shell: "/bin/zsh" });
+    // Keys go to the adopted shell.
+    const surface = screen.getByRole("textbox", { name: "Terminal" });
     act(() => surface.focus());
-    expect(restart.tabIndex).toBe(-1);
-    // The terminal itself must stay reachable.
-    expect(surface.tabIndex).toBe(0);
+    press(surface, { key: "x" });
+    expect(ptyWrite).toHaveBeenCalledWith("pty-7", "x");
+  });
 
-    act(() => surface.blur());
-    // Restored the moment you are not typing into a shell, so the
-    // controls stay keyboard-reachable.
-    expect(restart.tabIndex).toBe(0);
+  it("spawns fresh on a restart even when the tab carries an adoption", async () => {
+    render(<TerminalView cwd="/tmp" privilege="user" adopt="pty-7" restartKey={1} />);
+    await settle();
+    expect(ptyAdopt).not.toHaveBeenCalled();
+  });
+
+  it("leaves a handed-off shell running when its view unmounts", async () => {
+    /* Popping the panel out unmounts every view. Without this the shells
+       the new window was about to adopt were killed on the way. */
+    const { unmount } = render(<TerminalView cwd="/tmp" privilege="user" />);
+    await settle();
+    detachOnUnmount("pty-1");
+    unmount();
+    expect(ptyKill).not.toHaveBeenCalled();
+
+    // The mark is consumed: the next view of that id ends it as usual.
+    const second = render(<TerminalView cwd="/tmp" privilege="user" />);
+    await settle();
+    second.unmount();
+    expect(ptyKill).toHaveBeenCalledWith("pty-1");
   });
 });
