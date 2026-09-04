@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/Settings/SettingsDialog.test.tsx
+   sparkBook · src/shell/Settings/SettingsDialog.test.tsx
 
    Regression cover for two bugs in the settings sheet:
 

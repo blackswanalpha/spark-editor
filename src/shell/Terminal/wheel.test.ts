@@ -1,4 +1,4 @@
-/* sparkEditor — wheel translation for programs that own the screen */
+/* sparkBook — wheel translation for programs that own the screen */
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@bridge/commands", () => ({ isTauri: false }));

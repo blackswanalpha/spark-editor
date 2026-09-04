@@ -1,4 +1,4 @@
-# sparkEditor — Explanation
+# sparkBook — Explanation
 
 *Understanding-oriented. Companion to `docs/explanation/` and the code in `src/` + `src-tauri/`.*
 
@@ -6,7 +6,7 @@
 
 ---
 
-## 1. What sparkEditor is
+## 1. What sparkBook is
 
 A desktop editor — one window, one binary — that gives one writer one place to switch between three kinds of editing without leaving the document:
 
@@ -20,7 +20,7 @@ It is a **Tauri host (Rust) wrapping a React renderer (TypeScript + Vite)**. The
 
 Most editors commit to one camp. Notion (rich), Obsidian (markdown), VS Code (code) each optimise a single workflow and handle the others as an afterthought (paste a code block into Notion; paste rich text into VS Code). Writers, students, and developers all hit the gap in a single sitting — a README with a fenced diagram, a book chapter with a runnable snippet, lecture notes that mix prose, math, and code.
 
-Switching apps breaks clipboard flows, selection history, and attention. sparkEditor's bet is that **the document, not the app, is the unit of work**, and that the editor should follow the file rather than the other way around. Open any file, the mode follows its extension; flip modes from the palette without leaving the document.
+Switching apps breaks clipboard flows, selection history, and attention. sparkBook's bet is that **the document, not the app, is the unit of work**, and that the editor should follow the file rather than the other way around. Open any file, the mode follows its extension; flip modes from the palette without leaving the document.
 
 ## 3. Design tenets (and what they rule out)
 
@@ -91,7 +91,7 @@ Ids are **stable within a session, regenerated on load** — saved files stay hu
 
 Dirty tracking and undo live in `src/store/documents.ts:28` — `past`/`future` stacks per doc, capped at 100 snapshots.
 
-## 7. What sparkEditor is not (intentionally)
+## 7. What sparkBook is not (intentionally)
 
 - **Not a cloud editor** — no account, no sync, no server. Put your folder in git/Syncthing/Dropbox if you want sync.
 - **Not an IDE** — no DAP, no LSP, no project indexing. Code mode is a *good text surface*, not IntelliJ.

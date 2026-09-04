@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/App.tsx
+   sparkBook · src/App.tsx
    Top-level shell.  Wires together:
      • ThemeProvider  (3 themes + system)
      • ToastProvider
@@ -26,10 +26,18 @@ import { MarkdownEditor } from "@editor/MarkdownEditor";
 import { RichEditor } from "@editor/RichEditor";
 import { HtmlPreview } from "@editor/HtmlPreview";
 import { SvgEditor } from "@editor/SvgEditor";
+/* The binary + timeline surfaces are code-split: pdf.js alone is larger
+   than the rest of the renderer, and a markdown session should never pay
+   for it. `lazy` needs module scope — see the note by TerminalStandalone. */
+const ImageViewer = lazy(() => import("@editor/ImageViewer").then((m) => ({ default: m.ImageViewer })));
+const ImageEditor = lazy(() => import("@editor/ImageEditor").then((m) => ({ default: m.ImageEditor })));
+const AnimationBuilder = lazy(() => import("@editor/AnimationBuilder").then((m) => ({ default: m.AnimationBuilder })));
+const PdfReader = lazy(() => import("@editor/PdfReader").then((m) => ({ default: m.PdfReader })));
 import { SplashScreen } from "@shell/SplashScreen";
 import { WelcomeWizard } from "@shell/WelcomeWizard";
 import { OnboardingScreen } from "@shell/Onboarding";
 import { shouldShowWelcome } from "@shell/firstRun";
+import { openPath } from "@shell/openDocument";
 import { ThemeProvider, useTheme } from "@theme/ThemeProvider";
 import { ToastProvider, useToast } from "@ui/Toast";
 import { useDocs } from "@store/documents";
@@ -45,7 +53,13 @@ import {
   markHydrated,
   isRestoring,
 } from "@shell/workspace";
-import { readFile, recentsAdd, recentsGet, isTauri, pickMode } from "@bridge/commands";
+import {
+  bootCheckpoint,
+  seedProjects,
+  startCheckpointMirror,
+  flushCheckpoint,
+} from "@shell/checkpointManager";
+import { readFile, recentsAdd, recentsGet, isTauri } from "@bridge/commands";
 import { checkForUpdates, checkForUpdatesOnBoot } from "@bridge/updater";
 import { useSidebarLayout, SIDEBAR_MAX } from "@shell/useSidebarLayout";
 import { buildCommands, bindPalette, type CommandSpec, setCurrentRoot } from "@commands/registry";
@@ -56,11 +70,25 @@ import UnsavedChangesModal, { type UnsavedChoice } from "@shell/UnsavedChangesMo
 import ProjectSwitcher from "@shell/ProjectSwitcher";
 import "./App.css";
 
+/** Tab icon per document mode. */
+const MODE_ICON: Record<string, string> = {
+  markdown: "mode-markdown",
+  rich: "mode-rich",
+  html: "mode-html",
+  svg: "mode-svg",
+  code: "mode-code",
+  image: "mode-image",
+  imageedit: "mode-imageedit",
+  animation: "mode-animation",
+  pdf: "mode-pdf",
+};
+
 /* Boot latches. Module scope rather than a ref because StrictMode
    remounts the component, which would reset a ref and re-run the
    restore. */
 let bootStarted = false;
 let teardownAutosave: (() => void) | null = null;
+let teardownCheckpoint: (() => void) | null = null;
 
 function Shell() {
   const { resolved } = useTheme();
@@ -198,6 +226,15 @@ function Shell() {
   /* Window close request: guard the active doc, then close the Tauri
      window. */
   useEffect(() => {
+    // The last thing this window does: land both snapshots, then stop
+    // the mirror so a tick already queued cannot write on the way out.
+    const closeWindow = async () => {
+      flushWorkspace();
+      await flushCheckpoint();
+      teardownCheckpoint?.();
+      teardownCheckpoint = null;
+      try { await getCurrentWindow().close(); } catch {}
+    };
     const onClose = async () => {
       // Snapshot before anything tears down. This now runs on every quit
       // path: the titlebar X routes through this event too.
@@ -205,13 +242,10 @@ function Shell() {
       const id = active;
       const doc = id ? useDocs.getState().docs[id] : null;
       if (!doc?.dirty) {
-        try { await getCurrentWindow().close(); } catch {}
+        await closeWindow();
         return;
       }
-      pendingCloseRef.current = async () => {
-        flushWorkspace();
-        try { await getCurrentWindow().close(); } catch {}
-      };
+      pendingCloseRef.current = closeWindow;
       setUnsavedDocId(id);
       setUnsavedContext("Quitting will discard your unsaved changes.");
       setUnsavedError(null);
@@ -236,6 +270,20 @@ function Shell() {
     (async () => {
       await hydrateProjects();
       markHydrated();
+
+      // The checkpoint is the cross-window authority: it holds the
+      // project rows every window writes through and the window list the
+      // last quit left behind. Claiming it here is also what reopens the
+      // other windows — this window keeps the first row of the plan and
+      // the host opens one window per row after it.
+      const boot = await bootCheckpoint().catch(() => null);
+      if (boot) {
+        seedProjects(boot.projects, boot.projectId);
+        // Started before the restore, not after: the mirror only reacts
+        // to the projects store and skips writing while a restore is
+        // replaying, so there is no window where a change is missed.
+        teardownCheckpoint = startCheckpointMirror(boot.label);
+      }
 
       let restored = 0;
       const project = useProjects.getState().active();
@@ -308,7 +356,10 @@ function Shell() {
       const isMod = isMac() ? e.metaKey : e.ctrlKey;
       if (isMod && e.shiftKey && (e.key === "P" || e.key === "p")) { e.preventDefault(); setPaletteOpen(true); }
       else if (isMod && (e.key === "s" || e.key === "S")) { e.preventDefault(); runCommand("file.save"); }
-      else if (isMod && (e.key === "n" || e.key === "N")) { e.preventDefault(); runCommand("file.new"); }
+      // Before the new-document branch: with Shift held the browser
+      // reports "N", which that branch would otherwise swallow.
+      else if (isMod && e.shiftKey && (e.key === "n" || e.key === "N")) { e.preventDefault(); runCommand("window.new"); }
+      else if (isMod && !e.shiftKey && (e.key === "n" || e.key === "N")) { e.preventDefault(); runCommand("file.new"); }
       else if (isMod && (e.key === "w" || e.key === "W")) { e.preventDefault(); runCommand("tab.close"); }
       else if (isMod && (e.key === "b" || e.key === "B") && !e.shiftKey) { e.preventDefault(); sidebar.toggle(); }
       else if (isMod && e.key === "`") { e.preventDefault(); runCommand("view.toggleTerminal"); }
@@ -394,6 +445,7 @@ function Shell() {
 
       void (async () => {
         flushWorkspace();
+        await flushCheckpoint();
         teardownAutosave?.();
         teardownAutosave = null;
 
@@ -438,6 +490,7 @@ function Shell() {
   useEffect(() => {
     const onCloseProject = () => {
       flushWorkspace();
+      void flushCheckpoint();
       teardownAutosave?.();
       teardownAutosave = null;
       const docs = useDocs.getState();
@@ -479,7 +532,7 @@ function Shell() {
     return {
       id,
       label: d.name + (d.dirty ? "" : ""),
-      icon: d.mode === "markdown" ? "mode-markdown" : d.mode === "rich" ? "mode-rich" : d.mode === "html" ? "mode-html" : d.mode === "svg" ? "mode-svg" : "mode-code",
+      icon: MODE_ICON[d.mode] ?? "mode-code",
       dirty: d.dirty,
       closable: true,
     };
@@ -517,9 +570,7 @@ function Shell() {
               recents={recents}
               onOpen={async (path) => {
                 try {
-                  const text = await readFile(path);
-                  open({ name: path.split("/").pop() || path, path, mode: pickMode(path), raw: text });
-                  await recentsAdd(path).catch(() => {});
+                  await openPath(path);
                 } catch (e: any) {
                   toast.error("Open failed", e?.kind || "Unknown error");
                 }
@@ -603,6 +654,15 @@ function Shell() {
                     {activeDoc.mode === "html"     && <HtmlPreview    docId={activeDoc.id} />}
                     {activeDoc.mode === "svg"      && <SvgEditor      docId={activeDoc.id} />}
                     {activeDoc.mode === "code"     && <CodeEditor     docId={activeDoc.id} />}
+                    {(activeDoc.mode === "image" || activeDoc.mode === "imageedit"
+                      || activeDoc.mode === "animation" || activeDoc.mode === "pdf") && (
+                      <Suspense fallback={<div className="app__surface-loading">Loading surface…</div>}>
+                        {activeDoc.mode === "image"     && <ImageViewer      docId={activeDoc.id} />}
+                        {activeDoc.mode === "imageedit" && <ImageEditor      docId={activeDoc.id} />}
+                        {activeDoc.mode === "animation" && <AnimationBuilder docId={activeDoc.id} />}
+                        {activeDoc.mode === "pdf"       && <PdfReader        docId={activeDoc.id} />}
+                      </Suspense>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -630,9 +690,7 @@ function Shell() {
             onOpenFile={() => runCommand("file.open")}
             onOpenRecent={async (path) => {
               try {
-                const text = await readFile(path);
-                open({ name: path.split("/").pop() || path, path, mode: pickMode(path), raw: text });
-                await recentsAdd(path).catch(() => {});
+                await openPath(path);
               } catch (e: any) {
                 toast.error("Open failed", e?.kind || "Unknown error");
               }

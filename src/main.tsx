@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/main.tsx
+   sparkBook · src/main.tsx
    Renderer entry. Imports design tokens, base reset, and
    the App shell. Mounts into #root.
    ============================================================ */

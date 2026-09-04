@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **sparkEditor** are documented here.
+All notable changes to **sparkBook** are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are `YYYY-MM-DD` (EAT). See `../worklog.md` for the day-to-day build log and `../explanation.md` for design rationale.
 
@@ -92,7 +92,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 - **Terminal panel position and size moved into the terminal store**, so they can be restored per project — and so they survive a remount, which the old component-local ref could not.
 
 ### Fixed
-- **sparkEditor did not run in a browser at all.** `TitleBar`'s title-sync effect called `getCurrentWindow()` unguarded; outside Tauri that throws on `window.__TAURI_INTERNALS__.metadata`, and the optional-call syntax could not catch it, so the whole shell crashed on mount under `npm run dev`. All four window calls are now gated on `isTauri`.
+- **sparkBook did not run in a browser at all.** `TitleBar`'s title-sync effect called `getCurrentWindow()` unguarded; outside Tauri that throws on `window.__TAURI_INTERNALS__.metadata`, and the optional-call syntax could not catch it, so the whole shell crashed on mount under `npm run dev`. All four window calls are now gated on `isTauri`.
 - **The titlebar close button skipped the unsaved-changes guard.** It called `window.close()` directly, so quitting that way — the ordinary way — bypassed the dirty-buffer prompt entirely. It now routes through the shell like every other close path, which is also what lets the final workspace snapshot be written.
 - **Removed three dead bridge stubs** (`getAppState`, `setAppState`, `windowSetTitle`) that invoked Rust commands which were never implemented. They had no callers; any future one would have failed at runtime.
 
@@ -201,7 +201,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ### Changed
 - **Deps** — `package.json:73` adds `@xterm/xterm@^6.0.0` + `@xterm/addon-fit@^0.11.0` (2308 insertions, 24 files). `src-tauri/tauri.conf.json:28` `security.csp` → `null` (was `default-src 'self'…` — loosened for xterm `blob:`/inline styles in terminal panel; re-tighten before hardening).
-- **CSP** — noted above; OTA `latest.json` endpoint unchanged (`https://github.com/blackswanalpha/spark-editor/releases/latest/download/latest.json`).
+- **CSP** — noted above; OTA `latest.json` endpoint unchanged (`https://github.com/blackswanalpha/spark-book/releases/latest/download/latest.json`).
 
 ## [0.2.2] - 2026-08-28
 
@@ -223,7 +223,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ### Added
 - **Launch & setup icons** — regenerated `src-tauri/icons/` via `cargo tauri icon` from `_master.png` (1024). Proper desktop assets: `32x32.png`, `64x64.png`, `128x128.png`, `128x128@2x.png` (256), `icon.png` (512), `icon.icns` (macOS, 64 KB), `icon.ico` (Windows). `src-tauri/tauri.conf.json:32` — `bundle.icon` updated, `publisher/category/shortDescription/longDescription` set, `createUpdaterArtifacts: true`, and `linux`/`windows`/`macOS` bundle targets wired so installers create correct desktop shortcuts / Start-Menu entries / `.desktop` files.
-- **OTA updates** — `tauri-plugin-updater` (Rust `src-tauri/src/lib.rs:275` + `@tauri-apps/plugin-updater` JS) + `capabilities/{default,desktop}.json` (`updater:default`, `updater:allow-check`, `updater:allow-download-and-install`, `process:allow-restart`). New `src/bridge/updater.ts:1` (`checkForUpdates()`, `checkForUpdatesOnBoot()`) — silent boot check (4 s delay) and manual **Help → Check for Updates…** (`src/commands/registry.ts:336` + `src/App.tsx:229`). `tauri.conf.json:plugins.updater` pubkey `RWQ8g3GffHCTjah…krV` (now superseded in 0.2.1) and endpoint `https://github.com/blackswanalpha/spark-editor/releases/latest/download/latest.json`. CSP extended to GitHub.
+- **OTA updates** — `tauri-plugin-updater` (Rust `src-tauri/src/lib.rs:275` + `@tauri-apps/plugin-updater` JS) + `capabilities/{default,desktop}.json` (`updater:default`, `updater:allow-check`, `updater:allow-download-and-install`, `process:allow-restart`). New `src/bridge/updater.ts:1` (`checkForUpdates()`, `checkForUpdatesOnBoot()`) — silent boot check (4 s delay) and manual **Help → Check for Updates…** (`src/commands/registry.ts:336` + `src/App.tsx:229`). `tauri.conf.json:plugins.updater` pubkey `RWQ8g3GffHCTjah…krV` (now superseded in 0.2.1) and endpoint `https://github.com/blackswanalpha/spark-book/releases/latest/download/latest.json`. CSP extended to GitHub.
 - **File explorer** — `src/shell/SideBar.tsx` ports the designlab (`designlabs/labs/explorer.html`) to React. Lazy `read_dir` per directory, keyboard navigation (↑↓→← Enter Home End), toolbar (new file / refresh / collapse / show hidden), recents tab preserved, A11Y-004 tree-view contract.
 - **Explorer store** — `src/store/explorer.ts` — zustand + immer, lazy `children` cache, `setRoot` / `toggleDir` / `refresh` / `collapseAll` / `setSelected` / `createFile` actions, `subscribeToFileChanges` wires host `file:changed` events to tree refresh.
 - **Host commands** — `create_file(path, contents?)` (refuses to overwrite, returns `FileStat`) and `mkdir(path)` (`mkdir -p`, idempotent) added to `src-tauri/src/lib.rs`. Wrappers in `src/bridge/commands.ts`. Browser mocks in `MEMORY_FS` / `MEMORY_DIRS`. Docs: `docs/reference/host-commands.md`.
@@ -261,7 +261,7 @@ Initial public scaffolding. Usable in Vite (browser mock FS) and via Tauri when 
 - **Tauri host** — `src-tauri/src/lib.rs:38` — `HostError` (`NotFound`, `PermissionDenied`, `NotUtf8`, `IsADirectory`, `AlreadyExists`, `InvalidPath`, `Internal`) + commands `read_file`, `write_file` (returns `WriteReceipt`), `read_dir`, `stat`; plugins `dialog`, `fs`, `store`, `os`, `window-state`, `clipboard-manager`, `process`, `log`.
 - **Config** — `vite.config.ts:7` (aliases `@ui/@shell/@ir/...`, port 1420/1421), `tsconfig.json` (strict), `tauri.conf.json:13` (1280×800, CSP `default-src 'self'`), `Cargo.toml:32` (release `lto`, `opt-level s`).
 - **Documentation** — `README.md`, `explanation.md`, `description.md` (300 chars), `worklog.md`, `changelog/` (this file); `../docs/` (Diátaxis: tutorials/how-to/reference/explanation) + `../designlabs/` (static HTML prototypes + `verify_assets.py`).
-- **Packaging** — `package.json:2` `spark-editor@0.1.0`, scripts `dev/build/preview/typecheck/lint/test/tauri`.
+- **Packaging** — `package.json:2` `spark-book@0.1.0`, scripts `dev/build/preview/typecheck/lint/test/tauri`.
 
 ### Known limitations
 - File watcher (`notify` → `file:changed`) not yet wired; self-write suppression planned.
@@ -269,15 +269,15 @@ Initial public scaffolding. Usable in Vite (browser mock FS) and via Tauri when 
 - Session restore (`app_data_dir/recents.json`, window geometry) — host commands exist, renderer boot wiring is best-effort.
 - Single window, single user, local files only — no sync, no LSP/DAP, no collaboration (by design — see `explanation.md:7`).
 
-[Unreleased]: https://github.com/blackswanalpha/spark-editor/compare/v0.7.2...HEAD
-[0.7.2]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.7.2
-[0.5.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.5.0
-[0.4.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.4.0
-[0.3.3]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.3
-[0.3.2]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.2
-[0.3.1]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.1
-[0.3.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.3.0
-[0.2.2]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.2
-[0.2.1]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.1
-[0.2.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.2.0
-[0.1.0]: https://github.com/blackswanalpha/spark-editor/releases/tag/v0.1.0
+[Unreleased]: https://github.com/blackswanalpha/spark-book/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.7.2
+[0.5.0]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.5.0
+[0.4.0]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.4.0
+[0.3.3]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.3.3
+[0.3.2]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.3.2
+[0.3.1]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.3.1
+[0.3.0]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.3.0
+[0.2.2]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.2.2
+[0.2.1]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.2.1
+[0.2.0]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.2.0
+[0.1.0]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.1.0

@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/TerminalPanel.tsx
+   sparkBook · src/shell/TerminalPanel.tsx
 
    Floating terminal panel and its pop-out twin.
 
@@ -709,7 +709,7 @@ export function TerminalDialog({
               : isRoot
                 ? "Switch this shell back to a normal user shell"
                 : rootSupport?.alreadyRoot
-                  ? "sparkEditor already runs as root"
+                  ? "sparkBook already runs as root"
                   : `Restart this shell as root via ${rootSupport?.method ?? "pkexec"} — your OS will ask for the password`
           }
           onClick={togglePrivilege}

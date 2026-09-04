@@ -1,4 +1,4 @@
-/* sparkEditor — what the terminal surface actually sends
+/* sparkBook — what the terminal surface actually sends
 
    The encoder is unit-tested in bridge/pty.test.ts. This covers the
    wiring between a real key press on the focused surface and the bytes

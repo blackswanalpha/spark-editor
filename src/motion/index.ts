@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/motion/index.ts
+   sparkBook · src/motion/index.ts
    Centralized animation primitives.
 
    This module is the single source of truth for the editor's

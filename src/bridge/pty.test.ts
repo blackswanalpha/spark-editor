@@ -1,4 +1,4 @@
-/* sparkEditor — terminal key/paste encoding
+/* sparkBook — terminal key/paste encoding
    These run without a DOM terminal because encoding is pure: a
    KeyboardEvent-shaped input in, tty bytes out. */
 import { describe, expect, it, vi } from "vitest";

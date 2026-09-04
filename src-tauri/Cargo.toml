@@ -1,12 +1,12 @@
 [package]
-name = "spark-editor"
+name = "spark-book"
 version = "0.7.2"
-description = "sparkEditor — markdown, rich, code in one window"
-authors = ["sparkEditor team"]
+description = "sparkBook — text, images, animation and PDFs in one window"
+authors = ["sparkBook team"]
 edition = "2021"
 
 [lib]
-name = "spark_editor_lib"
+name = "spark_book_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

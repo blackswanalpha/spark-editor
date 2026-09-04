@@ -1,4 +1,4 @@
-/* sparkEditor — tests for updater error classification */
+/* sparkBook — tests for updater error classification */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@bridge/commands", () => ({ isTauri: false }));

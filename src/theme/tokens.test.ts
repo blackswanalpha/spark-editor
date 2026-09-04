@@ -1,4 +1,4 @@
-/* sparkEditor · src/theme/tokens.test.ts
+/* sparkBook · src/theme/tokens.test.ts
 
    Contrast contract for the five palettes. tokens.css is the source of
    truth; this test parses it and holds every foreground/background pair

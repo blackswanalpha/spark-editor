@@ -1,4 +1,4 @@
-/* sparkEditor — tests for first-run flag helpers */
+/* sparkBook — tests for first-run flag helpers */
 import { describe, expect, it, beforeEach } from "vitest";
 import { isOnboarded, markOnboarded, resetOnboarding, shouldShowWelcome } from "./firstRun";
 

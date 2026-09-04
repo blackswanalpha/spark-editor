@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src-tauri/src/pty.rs
+   sparkBook · src-tauri/src/pty.rs
 
    Real terminal sessions. A `portable-pty` child process runs an
    actual login shell; its output is fed through a `vt100` parser
@@ -10,7 +10,7 @@
    This replaces the previous xterm.js + fake-command-table panel.
 
    Privilege: `PtyPrivilege::Root` re-spawns the shell through
-   pkexec (falling back to `sudo -i`) so the OS — not sparkEditor —
+   pkexec (falling back to `sudo -i`) so the OS — not sparkBook —
    collects the password. No credential ever transits this process.
    ============================================================ */
 
@@ -591,7 +591,7 @@ fn default_shell() -> String {
 }
 
 /// Build the command for a session. For `Root` this wraps the shell in
-/// pkexec/sudo so the OS runs its own authentication; sparkEditor never
+/// pkexec/sudo so the OS runs its own authentication; sparkBook never
 /// sees or forwards a password.
 fn build_command(
     shell: &str,
@@ -1408,7 +1408,7 @@ mod tests {
     #[test]
     fn root_command_is_wrapped_in_a_privilege_helper() {
         // The elevated shell must go through pkexec/sudo — never through
-        // sparkEditor collecting a password itself.
+        // sparkBook collecting a password itself.
         if is_root() || root_method() == "none" {
             return;
         }

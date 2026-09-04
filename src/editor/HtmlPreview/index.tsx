@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/editor/HtmlPreview/index.tsx
+   sparkBook · src/editor/HtmlPreview/index.tsx
    No-server HTML webview.  Renders the active document's
    raw HTML inside an <iframe srcdoc> after inlining local
    assets (CSS <link>, <script src>) via the Tauri bridge

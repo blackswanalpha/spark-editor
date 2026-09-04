@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/workspace.ts
+   sparkBook · src/shell/workspace.ts
 
    Capture and restore the Workspace of the active project — the
    tabs, explorer tree, terminal tabs and panel layout that make a
@@ -13,8 +13,8 @@
    before `hydrated`, so the restore's own store writes never feed
    back into the cache they came from.
    ============================================================ */
-import { readFile, isTauri } from "@bridge/commands";
-import { useDocs } from "@store/documents";
+import { readFile, readFileBase64, isTauri } from "@bridge/commands";
+import { useDocs, isBinaryMode } from "@store/documents";
 import { useExplorer } from "@store/explorer";
 import { useTerminal } from "@store/terminal";
 import {
@@ -165,7 +165,11 @@ export async function restoreWorkspace(ws: Workspace): Promise<RestoreResult> {
 
     /* 2. Tabs. Reads run in parallel; a rejection means the file is gone. */
     const wanted = ws.tabs.slice(0, MAX_RESTORE_TABS);
-    const results = await Promise.allSettled(wanted.map((t) => readFile(t.path)));
+    // Image and PDF tabs hold bytes, not text: reading them through
+    // `readFile` would return mojibake (or fail on invalid UTF-8).
+    const results = await Promise.allSettled(
+      wanted.map((t) => (isBinaryMode(t.mode) ? readFileBase64(t.path) : readFile(t.path))),
+    );
 
     const openDocs = useDocs.getState().open;
     const ids: string[] = [];
@@ -182,6 +186,7 @@ export async function restoreWorkspace(ws: Workspace): Promise<RestoreResult> {
         path: tab.path,
         mode: tab.mode,
         raw: res.value,
+        binary: isBinaryMode(tab.mode),
         cursor: tab.cursor,
         scrollTop: tab.scrollTop,
       });

@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/Popover.tsx
+   sparkBook · src/ui/Popover.tsx
    Anchored popover built on Radix. Used for the bubble menu
    and rich-editor slash menu.
    ============================================================ */

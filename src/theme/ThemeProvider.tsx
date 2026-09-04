@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/theme/ThemeProvider.tsx
+   sparkBook · src/theme/ThemeProvider.tsx
    Reads/writes theme via the bridge; exposes a React context.
    Tauri-aware: on first run the saved preference is loaded via
    the Tauri Store plugin; if not running inside Tauri (dev/preview)

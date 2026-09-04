@@ -1,4 +1,4 @@
-/* sparkEditor · src/store/documents.test.ts */
+/* sparkBook · src/store/documents.test.ts */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 vi.mock("@bridge/commands", () => ({
@@ -9,14 +9,22 @@ vi.mock("@bridge/commands", () => ({
     device: 0,
     inode: 0,
   })),
+  writeFileBase64: vi.fn(async (_path, _contents) => ({
+    path: _path,
+    bytes: _contents.length,
+    mtime: new Date().toISOString(),
+    device: 0,
+    inode: 0,
+  })),
   saveFileDialog: vi.fn(async () => null),
   recentsAdd: vi.fn(async (p) => ["/welcome.md", p]),
 }));
 
-import { useDocs, basename } from "./documents";
-import { writeFile, saveFileDialog, recentsAdd } from "@bridge/commands";
+import { useDocs, basename, isBinaryMode } from "./documents";
+import { writeFile, writeFileBase64, saveFileDialog, recentsAdd } from "@bridge/commands";
 
 const mockedWriteFile = vi.mocked(writeFile);
+const mockedWriteFileBase64 = vi.mocked(writeFileBase64);
 const mockedSaveFileDialog = vi.mocked(saveFileDialog);
 const mockedRecentsAdd = vi.mocked(recentsAdd);
 
@@ -249,5 +257,62 @@ describe("document store — lifecycle races", () => {
     useDocs.getState().close(a);
     expect(() => useDocs.getState().close(a)).not.toThrow();
     expect(useDocs.getState().order).toEqual([]);
+  });
+});
+
+describe("binary documents", () => {
+  it("marks image and pdf modes binary and leaves text modes alone", () => {
+    expect(isBinaryMode("image")).toBe(true);
+    expect(isBinaryMode("imageedit")).toBe(true);
+    expect(isBinaryMode("pdf")).toBe(true);
+    expect(isBinaryMode("animation")).toBe(false);
+    expect(isBinaryMode("markdown")).toBe(false);
+  });
+
+  it("derives the binary flag from the mode at open time", () => {
+    const imgId = useDocs.getState().open({ name: "a.png", mode: "image", raw: "AAA" });
+    const mdId = useDocs.getState().open({ name: "a.md", mode: "markdown", raw: "# hi" });
+    expect(useDocs.getState().docs[imgId].binary).toBe(true);
+    expect(useDocs.getState().docs[mdId].binary).toBe(false);
+  });
+
+  it("saves a binary document through the base64 writer", async () => {
+    const id = useDocs.getState().open({ name: "a.png", path: "/a.png", mode: "image", raw: "QUJD" });
+    const result = await useDocs.getState().saveDocument(id);
+    expect(result).toEqual({ ok: true, path: "/a.png" });
+    expect(mockedWriteFileBase64).toHaveBeenCalledWith("/a.png", "QUJD");
+    expect(mockedWriteFile).not.toHaveBeenCalled();
+  });
+
+  it("saves a text document through the text writer", async () => {
+    const id = useDocs.getState().open({ name: "a.md", path: "/a.md", mode: "markdown", raw: "# hi" });
+    await useDocs.getState().saveDocument(id);
+    expect(mockedWriteFile).toHaveBeenCalledWith("/a.md", "# hi");
+    expect(mockedWriteFileBase64).not.toHaveBeenCalled();
+  });
+
+  it("uses the base64 writer for Save As on a binary document", async () => {
+    // clearAllMocks in beforeEach clears calls but not queued one-shot
+    // results, so reset this mock before queuing our own.
+    mockedSaveFileDialog.mockReset();
+    mockedSaveFileDialog.mockResolvedValue("/out.png");
+    const id = useDocs.getState().open({ name: "a.png", mode: "imageedit", raw: "QUJD" });
+    const result = await useDocs.getState().saveDocumentAs(id);
+    expect(result).toEqual({ ok: true, path: "/out.png" });
+    expect(mockedWriteFileBase64).toHaveBeenCalledWith("/out.png", "QUJD");
+  });
+
+  it("refuses a mode switch that would reinterpret the bytes", () => {
+    const id = useDocs.getState().open({ name: "a.png", mode: "image", raw: "QUJD" });
+    useDocs.getState().setMode(id, "code");
+    expect(useDocs.getState().docs[id].mode).toBe("image");
+    useDocs.getState().setMode(id, "imageedit");
+    expect(useDocs.getState().docs[id].mode).toBe("imageedit");
+  });
+
+  it("refuses a text document switching into a binary surface", () => {
+    const id = useDocs.getState().open({ name: "a.md", mode: "markdown", raw: "# hi" });
+    useDocs.getState().setMode(id, "pdf");
+    expect(useDocs.getState().docs[id].mode).toBe("markdown");
   });
 });

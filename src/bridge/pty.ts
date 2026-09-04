@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/bridge/pty.ts
+   sparkBook · src/bridge/pty.ts
 
    Typed bridge to the Rust PTY host (src-tauri/src/pty.rs).
 

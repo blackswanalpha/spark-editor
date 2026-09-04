@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/editor/CodeEditor/viewState.ts
+   sparkBook · src/editor/CodeEditor/viewState.ts
 
    Restoring a persisted caret and scroll offset into a CodeMirror
    view. Kept out of the component and free of DOM access so the

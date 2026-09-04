@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/StatusBar.tsx
+   sparkBook · src/ui/StatusBar.tsx
    Status bar segments: mode, language, encoding, Ln:Col.
    ============================================================ */
 import "./StatusBar.css";

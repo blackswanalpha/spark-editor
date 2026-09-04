@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/Terminal/scroll.ts
+   sparkBook · src/shell/Terminal/scroll.ts
 
    Viewport scrolling for the host-driven terminal.
 

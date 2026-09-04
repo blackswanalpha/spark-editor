@@ -1,4 +1,4 @@
-/* sparkEditor — terminal selection
+/* sparkBook — terminal selection
 
    The bug these pin down: copy used to run the DOM selection through
    `toString()`, and because rows and spans are absolutely positioned

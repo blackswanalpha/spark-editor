@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/bridge/events.ts
+   sparkBook · src/bridge/events.ts
    Typed wrappers around Tauri's listen().
    ============================================================ */
 import { listen as tListen, type UnlistenFn } from "@tauri-apps/api/event";

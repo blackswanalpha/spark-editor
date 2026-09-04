@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src-tauri/src/update_env.rs
+   sparkBook · src-tauri/src/update_env.rs
 
    What the renderer needs to know before it offers an OTA update:
    how this copy was installed, and whether an in-place update can
@@ -93,7 +93,7 @@ pub fn detect(version: &str) -> UpdateEnvironment {
                         } else {
                             Some(format!(
                                 "{path} is in a directory this app cannot write to, so an update \
-                                 cannot replace it. Move sparkEditor somewhere writable and retry."
+                                 cannot replace it. Move sparkBook somewhere writable and retry."
                             ))
                         },
                         artifact_path: Some(path),

@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/Loader.tsx
+   sparkBook · src/ui/Loader.tsx
    Three loader flavors: spinner, dots, progress bar.
    ============================================================ */
 import { motion } from "@motion/index";

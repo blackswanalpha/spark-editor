@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/ProjectSwitcher.tsx
+   sparkBook · src/shell/ProjectSwitcher.tsx
 
    Switch between projects (= opened folders). A dialog rather than a
    cascading menu because MenuBar's Dropdown is a flat <ul> with no
@@ -14,6 +14,7 @@ import { Input } from "@ui/Input";
 import { Button } from "@ui/Button";
 import { Icon } from "@ui/Icon";
 import { useProjects, LOOSE_ID, type Project } from "@store/projects";
+import { dropProject, mirrorProject } from "@shell/checkpointManager";
 import "./ProjectSwitcher.css";
 
 /** "2 hours ago" — coarse on purpose; the list is ordered, not audited. */
@@ -81,9 +82,23 @@ export default function ProjectSwitcher() {
   }, []);
 
   const commitRename = useCallback(() => {
-    if (renaming) renameProject(renaming, draftName);
+    if (renaming) {
+      renameProject(renaming, draftName);
+      // The mirror only follows the project in front, so a rename here
+      // has to reach the checkpoint itself or the next launch undoes it.
+      const renamed = useProjects.getState().get(renaming);
+      if (renamed) void mirrorProject(renamed);
+    }
     setRenaming(null);
   }, [renaming, draftName, renameProject]);
+
+  const forget = useCallback(
+    (id: string) => {
+      removeProject(id);
+      void dropProject(id);
+    },
+    [removeProject],
+  );
 
   return (
     <Dialog
@@ -168,7 +183,7 @@ export default function ProjectSwitcher() {
                     size="sm"
                     aria-label={`Remove ${p.name}`}
                     title="Remove from list"
-                    onClick={() => removeProject(p.id)}
+                    onClick={() => forget(p.id)}
                   >
                     <Icon name="trash" size={14} />
                   </Button>

@@ -1,0 +1,307 @@
+/* ============================================================
+   sparkBook · ImageEditor.css
+   Top bar · option bar · tool rail | stage | layers+adjust panel
+   ============================================================ */
+.imged {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface-1);
+  outline: none;
+}
+
+.imged--error {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--sp-3);
+  color: var(--text-muted);
+  font-size: var(--size-sm);
+}
+
+/* ---------- Bars ---------- */
+.imged__topbar,
+.imged__optionbar,
+.imged__resizebar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px var(--sp-2);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.imged__optionbar { background: var(--surface-1); min-height: 34px; }
+.imged__resizebar { background: var(--accent-soft); }
+
+.imged__group { display: flex; align-items: center; gap: 2px; }
+.imged__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 0;
+  background: var(--border);
+}
+.imged__spacer { flex: 1; }
+
+.imged__zoom {
+  min-width: 50px;
+  text-align: center;
+  font-family: var(--font-code);
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Fields ---------- */
+.imged__field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.imged__field--grow { flex: 1; min-width: 140px; }
+.imged__field > span { user-select: none; }
+.imged__field > b {
+  min-width: 34px;
+  text-align: right;
+  font-family: var(--font-code);
+  font-weight: 500;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.imged__field input[type="range"] { width: 96px; accent-color: var(--accent); }
+.imged__field input[type="number"] { width: 68px; }
+.imged__field input[type="text"] { flex: 1; min-width: 100px; }
+.imged__field input[type="text"],
+.imged__field input[type="number"],
+.imged__field select,
+.imged__layername {
+  background: var(--surface-1);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  font-size: var(--size-xs);
+  font-family: inherit;
+}
+.imged__field select { max-width: 130px; }
+
+.imged__check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  user-select: none;
+}
+.imged__check input { accent-color: var(--accent); }
+
+/* ---------- Colour swatches ---------- */
+.imged__swatches { position: relative; display: flex; align-items: center; }
+.imged__swatch {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0;
+}
+.imged__swatch--alt { margin-left: -8px; margin-top: 8px; }
+/* The native colour input is the picker; the square above is the target
+   people actually click, so the input is kept out of the layout. */
+.imged__colorinput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- Body ---------- */
+.imged__body {
+  display: grid;
+  grid-template-columns: 40px 1fr 260px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Tool rail */
+.imged__tools {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.imged__tool {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.imged__tool:hover { background: var(--surface-3); color: var(--text); }
+.imged__tool.is-active { background: var(--accent); color: var(--accent-fg); }
+
+/* Stage */
+.imged__stagewrap {
+  position: relative;
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-4);
+  background-color: var(--surface-3);
+  background-image:
+    linear-gradient(45deg, rgba(0, 0, 0, 0.07) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(0, 0, 0, 0.07) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.07) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.07) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+.imged__stage {
+  position: relative;
+  flex: none;
+  box-shadow: 0 2px 18px rgba(0, 0, 0, 0.28);
+  /* Transparent pixels read against the checkerboard, not the app chrome. */
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #d9dce3 25%, transparent 25%),
+    linear-gradient(-45deg, #d9dce3 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d9dce3 75%),
+    linear-gradient(-45deg, transparent 75%, #d9dce3 75%);
+  background-size: 14px 14px;
+  background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+}
+.imged__canvas,
+.imged__overlay {
+  position: absolute;
+  inset: 0;
+  image-rendering: pixelated;
+  touch-action: none;
+}
+.imged__overlay { cursor: crosshair; }
+.imged__overlay[data-tool="move"] { cursor: move; }
+.imged__overlay[data-tool="text"] { cursor: text; }
+.imged__overlay[data-tool="eyedropper"] { cursor: copy; }
+.imged__overlay[data-tool="brush"],
+.imged__overlay[data-tool="eraser"] { cursor: none; }
+
+/* Right panel */
+.imged__panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--surface-1);
+  border-left: 1px solid var(--border);
+}
+.imged__section {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border);
+}
+.imged__sectionhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  flex-wrap: wrap;
+}
+.imged__sectionhead h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.imged__note {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--size-xs);
+  color: var(--text-faint);
+  line-height: var(--lh-base);
+}
+.imged__section .imged__field { margin-bottom: 5px; }
+.imged__section .imged__field input[type="range"] { flex: 1; width: auto; min-width: 0; }
+.imged__section .imged__field > span { min-width: 62px; }
+
+/* Layer list */
+.imged__layers {
+  list-style: none;
+  margin: 0 0 var(--sp-2);
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.imged__layer {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.imged__layer:hover { background: var(--surface-2); }
+.imged__layer.is-active { background: var(--accent-soft); }
+.imged__layervis {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex: none;
+}
+.imged__layervis:hover { background: var(--surface-3); color: var(--text); }
+.imged__layername {
+  flex: 1;
+  min-width: 0;
+  border-color: transparent;
+  background: transparent;
+}
+.imged__layername:focus {
+  border-color: var(--border);
+  background: var(--surface-1);
+}
+.imged__layerpct {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.imged__layerprops { border-top: 1px solid var(--border); padding-top: var(--sp-2); }
+
+/* ---------- Status ---------- */
+.imged__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--sp-3);
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.imged__dot { opacity: 0.5; }
+.imged__pos { font-family: var(--font-code); }
+
+@media (max-width: 900px) {
+  .imged__body { grid-template-columns: 40px 1fr 210px; }
+}

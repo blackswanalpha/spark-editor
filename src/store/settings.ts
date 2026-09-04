@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/store/settings.ts
+   sparkBook · src/store/settings.ts
 
    User settings: appearance, editor and terminal preferences.
 
