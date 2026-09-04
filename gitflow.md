@@ -285,8 +285,8 @@ gh repo create spark-book --public --source=. --remote=origin --push
 
 # 5) create develop + protect
 git checkout -b develop && git push -u origin develop
-gh api repos/blackswanalpha/spark-editor/branches/main/protection  -X PUT  # require CI gate ✓
-gh api repos/blackswanalpha/spark-editor/branches/develop/protection -X PUT # same
+gh api repos/blackswanalpha/spark-book/branches/main/protection  -X PUT  # require CI gate ✓
+gh api repos/blackswanalpha/spark-book/branches/develop/protection -X PUT # same
 
 # 6) prove PR flow
 bash scripts/gitflow.sh branch feature/verify-gitflow
