@@ -19,6 +19,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ---
 
+## [0.8.0] — 2026-09-04
+
+sparkEditor is now **sparkBook**, and the window opens four more kinds of document.
+
+### Added
+
+- **Image viewer.** A PNG, JPEG, GIF, WebP, BMP, ICO or AVIF opens as a picture — pan, zoom, rotate, flip, and a choice of three backdrops for judging transparency — rather than as a wall of replacement characters, which is what reading bytes as UTF-8 text produced. View transforms never touch the file.
+- **Image editor.** A layered raster surface over the same bytes: move, rectangular select, brush, eraser, paint bucket, rectangle, ellipse, line, text, eyedropper and crop. Layers carry opacity, one of sixteen blend modes, visibility and a lock, and reorder, duplicate or merge down. Eight adjustments — brightness, contrast, saturation, hue, blur, grayscale, sepia, invert — preview live on the selected layer and bake into the pixels on apply. The canvas resizes, rotates, flips and crops. Saves PNG, JPEG or WebP over the file that was opened.
+- **A brush that behaves.** A stroke paints to a scratch surface and composites once on release, so a stroke crossing itself does not darken at the crossing. Soft edges are one blur over the finished path rather than a gradient stamped at every step, which is what keeps the edge even along the whole stroke.
+- **Animation builder.** Rectangles, ellipses, text and images on a stage, with a keyframe timeline. Keyframes drag to retime, take one of seven easings, and appear as you edit a property that is already animated. The scene is ordinary JSON in a `.sparkanim` file — diffable, hand-editable, version-controllable — so undo, dirty state and save are the same ones every other document gets. **Export HTML** writes one self-contained file that plays anywhere with no runtime.
+- **PDF reader.** Pages render as they are scrolled to and the text stays selectable, so copying out of a PDF gives text rather than a picture of it. Thumbnails, bookmarks, page navigation, fit-width and fit-page, rotate, and a search that reports which pages hold the term and highlights it where it sits.
+- **Binary documents.** A document now knows whether it holds text or bytes. Byte documents keep base64 in `raw` and save through a new `write_file_base64` host command. Switching one to a text surface is refused: reinterpreting base64 as source code is never what was meant.
+- **`New Image` and `New Animation`** in the command palette and the File menu — a blank 1280×800 canvas, and a starter scene.
+- **Session checkpoint.** The projects the app knows about, and the windows on screen at quit, are recorded by the Rust host rather than by whichever renderer happened to be last. One mutex covers the tables, the label counter and the restore plan, so four windows can autosave at the same moment without a lost update and "reopen the session" happens exactly once no matter how many windows ask.
+
+### Changed
+
+- **Renamed to sparkBook** — product name, window title, npm package, crate, bundle identifier and every file header. The GitHub repository moved with it, `spark-editor` → `spark-book`; GitHub redirects the old path, so clients on 0.7.2 keep updating.
+- **The four new surfaces are code-split.** pdf.js is larger than the rest of the renderer; a markdown session no longer downloads or parses it.
+- **One place decides how to read a file.** `src/shell/openDocument.ts` chooses between the text and byte host commands, and every open path — sidebar, recents, command palette, workspace restore — goes through it. The three call sites that each decided for themselves are gone.
+- **Undo in the image editor is its own stack.** A layer stack cannot be expressed as a diff over a string, so that surface keeps a 24-step document snapshot history and the Undo command routes to it by event. Every other surface is unchanged.
+- **The README banner** was rebuilt with the sparkBook wordmark, using the repository's own Inter rather than a lookalike. The app icons and `spark-mark.svg` carry no wordmark and are unchanged.
+
+### Fixed
+
+- **Restoring a session no longer corrupts an image tab.** Workspace restore read every remembered tab as UTF-8 text, so a reopened PNG or PDF came back as replacement characters — and saving over it would have destroyed the file.
+- **Flood fill's "already this colour" check never fired.** The packed target colour was signed while the pixel read back from the canvas was unsigned, so clicking the paint bucket on a region that already held the fill colour did the whole fill again and pushed a pointless undo step.
+- **A new blank canvas saved zero bytes.** The editor only encoded its pixels after the first edit, so `Ctrl+S` before the first brush stroke wrote an empty file.
+- **Nineteen dead documentation links.** The rename swept the GitHub URLs in the README, the gitflow guide and the changelogs along with it, pointing them at a repository that did not exist.
+
+### Known limitations
+
+- The ten UI screenshots in the README still show the old title bar text; they need recapturing from a running build.
+- The image editor's canvas painting and the PDF rasteriser are covered by their pure logic, the type checker and the production build, but have not been exercised in an automated browser — jsdom provides neither a 2D context nor a worker.
+
+---
+
 ## [0.7.2] — 2026-09-01
 
 ### Fixed
@@ -269,7 +306,8 @@ Initial public scaffolding. Usable in Vite (browser mock FS) and via Tauri when 
 - Session restore (`app_data_dir/recents.json`, window geometry) — host commands exist, renderer boot wiring is best-effort.
 - Single window, single user, local files only — no sync, no LSP/DAP, no collaboration (by design — see `explanation.md:7`).
 
-[Unreleased]: https://github.com/blackswanalpha/spark-book/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/blackswanalpha/spark-book/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.8.0
 [0.7.2]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.7.2
 [0.5.0]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.5.0
 [0.4.0]: https://github.com/blackswanalpha/spark-book/releases/tag/v0.4.0
