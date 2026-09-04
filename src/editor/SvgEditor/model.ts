@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/editor/SvgEditor/model.ts
+   sparkBook · src/editor/SvgEditor/model.ts
    Minimal SVG model used by the interactive surface.  The
    model is lossless with respect to `raw` only for the
    subset we manage (rect, circle, ellipse, line, path,

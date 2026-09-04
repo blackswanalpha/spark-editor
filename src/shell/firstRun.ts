@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/firstRun.ts
+   sparkBook · src/shell/firstRun.ts
    First-run ("has the user seen the welcome wizard?") flag.
    Mirrors the designlab contract (labs/onboarding.html): the
    flag lives in localStorage — the renderer-side analogue of

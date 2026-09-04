@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/editor/CodeEditor/index.tsx
+   sparkBook · src/editor/CodeEditor/index.tsx
    CodeMirror 6-based code surface with:
      • gutter
      • syntax highlighting (Shiki themes bridged through CM6)

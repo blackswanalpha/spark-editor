@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/Dialog.tsx
+   sparkBook · src/ui/Dialog.tsx
    Built on Radix Dialog (a11y: focus trap, ESC, scroll lock).
    ============================================================ */
 import * as RD from "@radix-ui/react-dialog";

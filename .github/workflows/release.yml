@@ -80,7 +80,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "sparkEditor v__VERSION__"
+          releaseName: "sparkBook v__VERSION__"
           releaseBody: "See changelog/CHANGELOG.md for notes. OTA manifests (latest.json) are attached."
           releaseDraft: false
           prerelease: false

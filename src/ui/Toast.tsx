@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/Toast.tsx
+   sparkBook · src/ui/Toast.tsx
    A tiny pub-sub toast manager with a live region for a11y.
    ============================================================ */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";

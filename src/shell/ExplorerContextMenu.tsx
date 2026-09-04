@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/ExplorerContextMenu.tsx
+   sparkBook · src/shell/ExplorerContextMenu.tsx
    Right-click bubble menu for the file explorer. Wraps a
    trigger element and renders a context menu with:
      • New File        • Cut

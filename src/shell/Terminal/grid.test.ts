@@ -1,4 +1,4 @@
-/* sparkEditor — terminal frame -> grid reduction */
+/* sparkBook — terminal frame -> grid reduction */
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@bridge/commands", () => ({ isTauri: false }));

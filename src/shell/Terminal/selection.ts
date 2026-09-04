@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/Terminal/selection.ts
+   sparkBook · src/shell/Terminal/selection.ts
 
    Selection over the terminal grid, as pure functions.
 

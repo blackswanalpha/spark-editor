@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/CommandPalette.tsx
+   sparkBook · src/shell/CommandPalette.tsx
    Ctrl+Shift+P command palette.  Built as a small listbox
    with a single text input and a virtualisable list.  Items
    come from the central registry.

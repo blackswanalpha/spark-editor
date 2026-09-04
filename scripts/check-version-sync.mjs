@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* ============================================================
-   sparkEditor · scripts/check-version-sync.mjs
+   sparkBook · scripts/check-version-sync.mjs
 
    Fails when the three version declarations disagree.
 

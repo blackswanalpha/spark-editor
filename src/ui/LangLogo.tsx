@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/LangLogo.tsx
+   sparkBook · src/ui/LangLogo.tsx
    Real SVG language logo icons backed by
    `react-material-icon-theme`. Looks up the VS Code Material
    Icon Theme icon name from our internal `LangId` (file

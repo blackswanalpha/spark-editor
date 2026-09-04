@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install local git hooks for sparkEditor.
+# Install local git hooks for sparkBook.
 # Idempotent — safe to run multiple times.
 # Hooks installed: .git/hooks/pre-push (and optional pre-commit)
 set -euo pipefail

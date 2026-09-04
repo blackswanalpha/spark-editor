@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/MenuBar.tsx
+   sparkBook · src/shell/MenuBar.tsx
    In-window menu bar that lives directly below TitleBar.
    Renders a horizontal row of top-level menus (File, Edit,
    Selection, View, Format, Window, Help) with dropdowns
@@ -70,6 +70,8 @@ const DOC_GATED = new Set<string>([
   "view.markdown",
   "view.rich",
   "view.code",
+  "view.image",
+  "view.imageEdit",
   "view.switchMode",
   "view.togglePreview",
   "view.toggleWordWrap",

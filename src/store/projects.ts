@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/store/projects.ts
+   sparkBook · src/store/projects.ts
 
    Projects cache. A "project" is an opened folder root; each one
    carries a Workspace — the snapshot restored on next launch.
@@ -98,7 +98,10 @@ export const MAX_PROJECTS = 20;
 export const MAX_RESTORE_TABS = 20;
 export const MAX_EXPANDED = 200;
 
-const DOC_MODES: DocMode[] = ["markdown", "rich", "code", "html", "svg"];
+const DOC_MODES: DocMode[] = [
+  "markdown", "rich", "code", "html", "svg",
+  "image", "imageedit", "animation", "pdf",
+];
 
 export const EMPTY_WORKSPACE: Workspace = {
   tabs: [],

@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/SaveAsModal.tsx
+   sparkBook · src/shell/SaveAsModal.tsx
    Controlled "Save As…" dialog. Parent owns the open state
    and decides what to do with the chosen path.
    ============================================================ */

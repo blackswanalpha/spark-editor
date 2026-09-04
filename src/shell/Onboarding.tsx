@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/Onboarding.tsx
+   sparkBook · src/shell/Onboarding.tsx
    First-time-setup empty state — ported from
    designlabs/labs/onboarding.html. Shown when no documents are
    open. Cards dispatch the same command ids as the menus; the
@@ -53,7 +53,7 @@ export function OnboardingScreen({
     <motion.div
       className="onboard"
       role="region"
-      aria-label="Welcome to sparkEditor"
+      aria-label="Welcome to sparkBook"
       variants={staggerParent(0.05)}
       initial="initial"
       animate="animate"
@@ -67,7 +67,7 @@ export function OnboardingScreen({
         height={64}
       />
       <motion.div variants={staggerItem} className="onboard__title">
-        {projectName ? `No files open in ${projectName}` : "Welcome to sparkEditor"}
+        {projectName ? `No files open in ${projectName}` : "Welcome to sparkBook"}
       </motion.div>
       <motion.p variants={staggerItem} className="onboard__sub">
         {projectName

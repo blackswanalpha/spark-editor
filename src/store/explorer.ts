@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/store/explorer.ts
+   sparkBook · src/store/explorer.ts
    File explorer store. Holds the root folder, expanded
    directories, lazily-cached children, and selection state
    for the sidebar tree.  Backed by zustand + immer.

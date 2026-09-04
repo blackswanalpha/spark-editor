@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/editor/SvgEditor/index.tsx
+   sparkBook · src/editor/SvgEditor/index.tsx
    Interactive vector surface for .svg files.
 
    Principles:

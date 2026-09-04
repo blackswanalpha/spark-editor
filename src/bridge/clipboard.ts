@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/bridge/clipboard.ts
+   sparkBook · src/bridge/clipboard.ts
 
    One clipboard for the whole app, with the fallbacks the desktop
    build actually needs.

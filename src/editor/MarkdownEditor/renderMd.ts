@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/editor/MarkdownEditor/renderMd.ts
+   sparkBook · src/editor/MarkdownEditor/renderMd.ts
    Tiny, safe, dependency-free markdown renderer. Supports:
      • headings #…######
      • **bold**, *italic*, ~~strike~~, `code`

@@ -3592,8 +3592,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "spark-editor"
-version = "0.7.2"
+name = "spark-book"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",

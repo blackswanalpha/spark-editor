@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/Tabs.tsx
+   sparkBook · src/ui/Tabs.tsx
    Document tab strip used by the editor shell.
    Uses a subtle "underline-on-active" visual; pills optional.
    ============================================================ */

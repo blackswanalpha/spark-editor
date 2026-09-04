@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/store/explorer.test.ts
+   sparkBook · src/store/explorer.test.ts
    Tests for the explorer store actions added for the
    context-menu (rename / delete / copy / clipboard paste).
 

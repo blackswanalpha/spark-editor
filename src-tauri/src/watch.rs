@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src-tauri/src/watch.rs
+   sparkBook · src-tauri/src/watch.rs
 
    Filesystem watching for the explorer.
 
@@ -177,6 +177,10 @@ struct Watch {
     /// after the initial walk.
     _watcher: Arc<Mutex<RecommendedWatcher>>,
     stop: Arc<AtomicBool>,
+    /// The window that asked for it. A watcher outlives its window only
+    /// if nobody claims it, and with several editor windows open that is
+    /// a thread and an inotify budget leaked per window closed.
+    owner: String,
 }
 
 #[derive(Default)]
@@ -237,6 +241,7 @@ fn coalesce(events: Vec<Event>) -> Vec<FileChange> {
 #[tauri::command]
 pub fn watch_path(
     app: AppHandle,
+    window: tauri::Window,
     manager: tauri::State<'_, WatchManager>,
     path: String,
 ) -> Result<String, HostError> {
@@ -287,10 +292,12 @@ pub fn watch_path(
     let watcher = Arc::new(Mutex::new(watcher));
     let id = format!("watch-{}", manager.next_id.fetch_add(1, Ordering::SeqCst) + 1);
     let stop = Arc::new(AtomicBool::new(false));
+    let owner = window.label().to_string();
 
     {
         let stop = stop.clone();
         let watcher = watcher.clone();
+        let owner = owner.clone();
         let mut watched = dirs.len();
         std::thread::spawn(move || {
             let mut batch: Vec<Event> = Vec::new();
@@ -347,11 +354,15 @@ pub fn watch_path(
                     // Past the cap the explorer would re-read the same
                     // directories anyway, so send a bounded prefix and one
                     // marker instead of thousands of messages.
+                    // Addressed to the window that asked. Broadcasting
+                    // would make every other window re-read directories
+                    // for a project it does not have open.
                     if changes.len() > MAX_CHANGES_PER_FLUSH {
                         for change in changes.into_iter().take(MAX_CHANGES_PER_FLUSH) {
-                            let _ = app.emit("file:changed", change);
+                            let _ = app.emit_to(owner.as_str(), "file:changed", change);
                         }
-                        let _ = app.emit(
+                        let _ = app.emit_to(
+                            owner.as_str(),
                             "file:changed",
                             FileChange {
                                 kind: "bulk".to_string(),
@@ -361,7 +372,7 @@ pub fn watch_path(
                         );
                     } else {
                         for change in changes {
-                            let _ = app.emit("file:changed", change);
+                            let _ = app.emit_to(owner.as_str(), "file:changed", change);
                         }
                     }
                     window_opened = None;
@@ -377,6 +388,7 @@ pub fn watch_path(
         Watch {
             _watcher: watcher,
             stop,
+            owner,
         },
     );
     Ok(id)
@@ -393,6 +405,20 @@ pub fn unwatch_path(
         watch.stop.store(true, Ordering::SeqCst);
     }
     Ok(())
+}
+
+/// Stop the watchers one window asked for. Called when that window is
+/// destroyed, so its threads go with it and the others carry on.
+pub fn shutdown_window(manager: &WatchManager, label: &str) {
+    if let Ok(mut watches) = manager.watches.lock() {
+        watches.retain(|_, watch| {
+            if watch.owner != label {
+                return true;
+            }
+            watch.stop.store(true, Ordering::SeqCst);
+            false
+        });
+    }
 }
 
 /// Stop every watcher. Called on exit so no thread outlives the app.

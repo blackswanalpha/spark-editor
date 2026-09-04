@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/Dropdown.tsx
+   sparkBook · src/ui/Dropdown.tsx
    Menu primitive built on Radix DropdownMenu (a11y + keyboard).
    ============================================================ */
 import * as RD from "@radix-ui/react-dropdown-menu";

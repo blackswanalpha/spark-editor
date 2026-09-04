@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/bridge/updater.ts
+   sparkBook · src/bridge/updater.ts
    OTA updater bridge (Tauri plugin-updater).
 
    Why this file is more than a `check()` call
@@ -239,7 +239,7 @@ export async function checkForUpdates(opts?: UpdateOptions): Promise<boolean> {
   try {
     const update = await check();
     if (!update) {
-      if (!opts?.silent) opts?.onInfo?.("No updates", `sparkEditor ${currentVersion} is up to date`);
+      if (!opts?.silent) opts?.onInfo?.("No updates", `sparkBook ${currentVersion} is up to date`);
       return false;
     }
 

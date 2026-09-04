@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/store/documents.ts
+   sparkBook · src/store/documents.ts
    Document store. Holds open documents, active doc, dirty,
    per-doc history (undo/redo).  Backed by zustand + immer.
    ============================================================ */
@@ -7,12 +7,28 @@ import { create } from "zustand";
 import { produce, enableMapSet } from "immer";
 import type { Document } from "@ir/types";
 import { newId } from "@ir/ids";
-import { writeFile, saveFileDialog, recentsAdd } from "@bridge/commands";
+import { writeFile, writeFileBase64, saveFileDialog, recentsAdd } from "@bridge/commands";
 import type { DialogFilter } from "@bridge/commands";
 
 enableMapSet();
 
-export type DocMode = "markdown" | "rich" | "code" | "html" | "svg";
+export type DocMode =
+  | "markdown"
+  | "rich"
+  | "code"
+  | "html"
+  | "svg"
+  /** Read-only raster image surface: pan, zoom, inspect. */
+  | "image"
+  /** Layered raster editor over the same bytes as `image`. */
+  | "imageedit"
+  /** Keyframe timeline over a `.sparkanim` JSON scene. */
+  | "animation"
+  /** Paged PDF reader. */
+  | "pdf";
+
+/** Modes whose `raw` holds base64-encoded bytes rather than UTF-8 text. */
+export const BINARY_MODES: readonly DocMode[] = ["image", "imageedit", "pdf"];
 
 export interface OpenDoc {
   id: string;
@@ -21,12 +37,21 @@ export interface OpenDoc {
   mode: DocMode;
   language?: string;
   ir: Document;
-  raw: string;                  // raw text — used for code / markdown
+  /** Raw text for text modes; base64 bytes when `binary` is true. */
+  raw: string;
+  /** True when `raw` is base64. Set from the mode at open time and kept
+      across mode switches (image ⇄ imageedit both hold the same bytes). */
+  binary: boolean;
   dirty: boolean;
   cursor: { line: number; col: number };
   /** Scroll offset of the editor surface, in px. Persisted per project
       so a restored tab lands where it was left. */
   scrollTop: number;
+}
+
+/** True when documents in `mode` are stored as base64 bytes. */
+export function isBinaryMode(mode: DocMode): boolean {
+  return BINARY_MODES.includes(mode);
 }
 
 /**
@@ -93,6 +118,7 @@ export const useDocs = create<State & Actions>((set, get) => ({
       language: init.language,
       ir: init.ir ?? { version: 1, blocks: [] },
       raw: init.raw ?? "",
+      binary: init.binary ?? isBinaryMode(init.mode ?? "markdown"),
       dirty: false,
       cursor: init.cursor ?? { line: 1, col: 1 },
       scrollTop: init.scrollTop ?? 0,
@@ -121,9 +147,15 @@ export const useDocs = create<State & Actions>((set, get) => ({
 
   setActive: (id) => set((s) => (s.docs[id] ? { active: id } : s)),
 
-  setMode: (id, mode) => set((s) => (
-    s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], mode } } } : s
-  )),
+  /* Switching between a binary and a text mode would reinterpret base64
+     bytes as source text (and back), so the two families are kept apart.
+     image ⇄ imageedit and every text-mode pair stay free. */
+  setMode: (id, mode) => set((s) => {
+    const doc = s.docs[id];
+    if (!doc) return s;
+    if (isBinaryMode(mode) !== doc.binary) return s;
+    return { docs: { ...s.docs, [id]: { ...doc, mode } } };
+  }),
 
   setRaw: (id, raw) => {
     const before = get().docs[id];
@@ -213,7 +245,7 @@ export const useDocs = create<State & Actions>((set, get) => ({
     const path = doc.path;
     const written = doc.raw;
     try {
-      await writeFile(path, written);
+      await (doc.binary ? writeFileBase64(path, written) : writeFile(path, written));
       // Only clean when the buffer still matches what reached disk. Edits
       // made while the write was in flight must stay dirty, or they are
       // silently dropped on the next close.
@@ -238,7 +270,7 @@ export const useDocs = create<State & Actions>((set, get) => ({
     // typing while it was open, and `doc` above is a pre-dialog snapshot.
     const written = get().docs[id]?.raw ?? doc.raw;
     try {
-      await writeFile(path, written);
+      await (doc.binary ? writeFileBase64(path, written) : writeFile(path, written));
       get().setPath(id, path);
       get().setName(id, basename(path));
       if (get().docs[id]?.raw === written) get().markClean(id);

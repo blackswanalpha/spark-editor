@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/ContextMenu.tsx
+   sparkBook · src/ui/ContextMenu.tsx
    Right-click context menu built on Radix ContextMenu
    (a11y: keyboard nav, ESC dismiss, focus management).
    Mirrors Popover/Dropdown visual style and uses the same

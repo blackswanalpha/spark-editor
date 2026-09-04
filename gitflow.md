@@ -2,7 +2,7 @@
 
 > One branching model. One local gate. One remote gate. Zero surprises.
 
-This document defines how `sparkEditor` moves code from a laptop to `main` — automatically tested, linted, built, and shipped through GitHub.
+This document defines how `sparkBook` moves code from a laptop to `main` — automatically tested, linted, built, and shipped through GitHub.
 
 ---
 
@@ -88,8 +88,8 @@ Branch name: main, develop
 ### 3.1 Bootstrap (once per clone)
 
 ```bash
-git clone git@github.com:<you>/spark-editor.git
-cd spark-editor
+git clone git@github.com:<you>/spark-book.git
+cd spark-book
 
 npm ci                          # install deps
 npm run ci                      # verify local gate
@@ -260,7 +260,7 @@ PR template              ──►  .github/pull_request_template.md
 The steps below were executed to bring _this_ checkout under gitflow from scratch (see terminal log):
 
 ```bash
-cd sparkEditor-main
+cd sparkBook-main
 
 # 1) ensure toolchain
 node -v      # v22
@@ -280,13 +280,13 @@ gh auth status  # ✓ blackswanalpha
 # 4) git init + initial commit + GitHub
 git init -b main
 git add -A && git commit -m "chore: bootstrap gitflow, CI and tooling"
-gh repo create spark-editor --public --source=. --remote=origin --push
+gh repo create spark-book --public --source=. --remote=origin --push
 # → gh creates remote, pushes main
 
 # 5) create develop + protect
 git checkout -b develop && git push -u origin develop
-gh api repos/blackswanalpha/spark-editor/branches/main/protection  -X PUT  # require CI gate ✓
-gh api repos/blackswanalpha/spark-editor/branches/develop/protection -X PUT # same
+gh api repos/blackswanalpha/spark-book/branches/main/protection  -X PUT  # require CI gate ✓
+gh api repos/blackswanalpha/spark-book/branches/develop/protection -X PUT # same
 
 # 6) prove PR flow
 bash scripts/gitflow.sh branch feature/verify-gitflow
@@ -296,7 +296,7 @@ bash scripts/gitflow.sh push-pr   # → PR feature/verify-gitflow → develop, C
 # 7) clean up probe branch after merge, or close PR if this was a dry run
 ```
 
-> The repo you are reading (`sparkEditor-main/.git`, `origin` on GitHub) *is* the artefact. `git log --oneline`, `gh pr list`, and `Actions → CI` show the wiring.
+> The repo you are reading (`sparkBook-main/.git`, `origin` on GitHub) *is* the artefact. `git log --oneline`, `gh pr list`, and `Actions → CI` show the wiring.
 
 ---
 

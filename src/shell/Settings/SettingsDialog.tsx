@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/Settings/SettingsDialog.tsx
+   sparkBook · src/shell/Settings/SettingsDialog.tsx
 
    Settings, opened from the gear at the bottom of the plugin rail
    or from the command palette ("Settings").

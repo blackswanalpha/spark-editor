@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/bridge/commands.ts
+   sparkBook · src/bridge/commands.ts
    Typed wrappers around Tauri's invoke(). When running in
    plain Vite (no Tauri host) the wrappers fall back to safe
    in-memory implementations so the renderer can be developed
@@ -56,6 +56,10 @@ export const readFile  = (path: string) => call<string>("read_file", { path });
 export const readFileBase64 = (path: string) => call<string>("read_file_base64", { path });
 export const readFileBinary = (path: string) => readFileBase64(path);
 export const writeFile = (path: string, contents: string) => call<WriteReceipt>("write_file", { path, contents });
+/** Write raw bytes given as a base64 string. Used by the image editor and
+    any surface whose document is binary rather than text. */
+export const writeFileBase64 = (path: string, base64: string) =>
+  call<WriteReceipt>("write_file_base64", { path, contents: base64 });
 export const stat      = (path: string) => call<FileStat>("stat", { path });
 export const readDir   = (path: string) => call<DirEntry[]>("read_dir", { path });
 export const renamePath= (from: string, to: string) => call<void>("rename", { from, to });
@@ -128,16 +132,51 @@ export function joinPath(parent: string, name: string): string {
 
 /* ---------- Mock FS (browser only) ---------- */
 const MEMORY_FS = new Map<string, string>([
-  ["/welcome.md", `# Welcome to sparkEditor\n\nThis is a *demo* document.\n\n\`\`\`ts\nconst hello = "world";\n\`\`\`\n`],
+  ["/welcome.md", `# Welcome to sparkBook\n\nThis is a *demo* document.\n\n\`\`\`ts\nconst hello = "world";\n\`\`\`\n`],
   ["/notes.md",   `# Notes\n\n- Markdown surface\n- Rich text\n- Code`],
   ["/hello.ts",   `// hello.ts\nexport const greet = (n: string) => \`Hello, \${n}!\`;\n`],
-  ["/README.md",  `# sparkEditor\n\nUnifies markdown, rich text, and code in one window.`],
+  ["/README.md",  `# sparkBook\n\nUnifies markdown, rich text, and code in one window.`],
   ["/docs/README.md", `# docs/\n\nReference and explanation documents.`],
   ["/demo/index.html", `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="./style.css"><title>Demo</title></head><body><h1>Hello HTML preview</h1><p>This file is rendered via <code>HtmlPreview</code> without a server.</p><script src="./app.js"></script></body></html>`],
   ["/demo/style.css", `body{font-family:Inter,sans-serif;padding:24px;color:#222}h1{color:#6c5ce7}`],
   ["/demo/app.js", `console.log("bundled js works"); document.body.insertAdjacentHTML("beforeend","<p><em>js bundled ✓</em></p>")`],
   ["/demo/logo.svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80"><rect x="10" y="10" width="180" height="60" rx="10" fill="#6c5ce7"/><text x="100" y="45" text-anchor="middle" fill="white" font-family="Inter" font-size="16">spark svg</text></svg>`],
   ["/sample.svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600"><rect x="80" y="80" width="220" height="140" rx="12" fill="#6c5ce7" stroke="#2d3436" stroke-width="2"/><circle cx="520" cy="180" r="70" fill="#00cec9" stroke="#2d3436" stroke-width="2"/><text x="80" y="300" fill="#2d3436" font-size="20" font-family="Inter">Editable SVG — select, drag, recolour</text></svg>`],
+]);
+
+/**
+ * Binary fixtures for the mock host. Kept apart from `MEMORY_FS` because
+ * `read_file_base64` must return these payloads verbatim rather than
+ * base64-encoding a text string. They give the image and PDF surfaces
+ * something real to open when the renderer runs under plain `vite`.
+ */
+const MEMORY_BIN = new Map<string, string>([
+  ["/sample.png",
+    "iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAYAAAA+VemSAAADIklEQVR42u3TQQ0AIAwEwTrBGX55QHBU8NBfM4/NGbiJ" +
+    "MW+qb3GWOufkAAtgASyABbAAFsAAC2ABLIAFsAAWwAALYAEsgAWwABbAAAtgASyABbAAFsACGGABLIAFsAAWwAIYYAEs" +
+    "gAWwABbAAhhgASyABbAAFsACGGABLIAFsAAWwAJYAAMsgAWwABbAAlgAAyyABbAAFsACWAADLIAFsAAWwAJYAAPs5AAL" +
+    "YAEsgAWwABbAAAtgASyABbAAFsAAC2ABLIAFsAAWwAALYAEsgAWwABbAcnKABbAAFsACWAALYIAFsAAWwAJYAAtggAWw" +
+    "ABbAAlgAC2CABbAAFsACWAALYAEMsAAWwAJYAAtgAQywABbAAlgAC2ABDLAAFsACWAALYAEMsAAWwAJYAAtgASyAARbA" +
+    "AlgAC2ABLIABFsACWAALYAEsgAEWwAJYAAtgASyAAXZygAWwABbAAlgAC2CABbAAFsACWAALYIAFsAAWwAJYAAtggAWw" +
+    "ABbAAlgAC2ABDLAAFsACWAALYAEMsAAWwAJYAAtgAQywABbAAlgAq1ymWrf/qG0ODrAAFsACWAALYAEMsAAWwAJYAAtg" +
+    "AQywABbAAlgAC2ABDLAAFsACWAALYAEsgAEWwAJYAAtgASyAARbAAlgAC2ABLIABFsACWAALYAEsgAEWwAJYAAtgASyA" +
+    "BTDAAlgAC2ABLIAFMMACWAALYAEsgAUwwAJYAAtgASyABTDATg6wABbAAlgAC2ABDLAAFsACWAALYAEMsAAWwAJYAAtg" +
+    "AQywABbAAlgAC2ABLIABFsACWAALYAEsgAEWwAJYAAtgASyAARbAAlgAC2ABLIABFsACWAALYAEsgAUwwAJYAAtgASyA" +
+    "BTDAAlgAC2ABLIAFMMACWAALYAEsgAUwwAJYAAtgASyABbAABlgAC2ABLIAFsAAGWAALYAEsgAWwAAZYAAtgASyABbAA" +
+    "lpMDLIAFsAAWwAJYAAMsgAWwABbAAlgAAyyABbAAFsACWAADLIAFsAAWwAJYAMvBARbAAlgAC2ABLIABFsACWAALYAEs" +
+    "gAEWwAJYAAtglXtym/2aWdeeNgAAAABJRU5ErkJggg=="],
+  ["/sample.pdf",
+    "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwg" +
+    "L1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2Ug" +
+    "L1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA0MjAgMzAwXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAg" +
+    "UiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAxNjEgPj4Kc3RyZWFtCkJU" +
+    "IC9GMSAyMiBUZiA0OCAyMTAgVGQgKHNwYXJrQm9vayBQREYgc2FtcGxlKSBUaiBFVApCVCAvRjEgMTIgVGYgNDggMTc4" +
+    "IFRkIChTY3JvbGwsIHpvb20sIHNlYXJjaCBhbmQgc2VsZWN0IHRoaXMgdGV4dC4pIFRqIEVUCjAuMTIgMC4zNyAwLjgy" +
+    "IHJnIDQ4IDYwIDMyMCA5MCByZSBmCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlw" +
+    "ZSAvVHlwZTEgL0Jhc2VGb250IC9IZWx2ZXRpY2EgPj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAK" +
+    "MDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0" +
+    "MSAwMDAwMCBuIAowMDAwMDAwNDUzIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFy" +
+    "dHhyZWYKNTIzCiUlRU9GCg=="],
 ]);
 
 /**
@@ -188,7 +227,8 @@ function mock<T>(cmd: string, args?: any): T {
       if (MEMORY_DIRS.has(p) && !MEMORY_FS.has(p)) {
         return { path: p, isFile: false, isDir: true, size: 0, mtime: new Date().toISOString() } as unknown as T;
       }
-      return { path: p, isFile: MEMORY_FS.has(p), isDir: false, size: 0, mtime: new Date().toISOString() } as unknown as T;
+      const isFile = MEMORY_FS.has(p) || MEMORY_BIN.has(p);
+      return { path: p, isFile, isDir: false, size: 0, mtime: new Date().toISOString() } as unknown as T;
     }
     case "read_dir": {
       const p: string = args.path;
@@ -231,6 +271,9 @@ function mock<T>(cmd: string, args?: any): T {
           { name: "notes.md",   isFile: true,  isDir: false },
           { name: "hello.ts",   isFile: true,  isDir: false },
           { name: "README.md",  isFile: true,  isDir: false },
+          { name: "sample.svg", isFile: true,  isDir: false },
+          { name: "sample.png", isFile: true,  isDir: false },
+          { name: "sample.pdf", isFile: true,  isDir: false },
           { name: "docs",       isFile: false, isDir: true  },
         ];
         return fixed as unknown as T;
@@ -246,8 +289,14 @@ function mock<T>(cmd: string, args?: any): T {
       }
       return out as unknown as T;
     }
+    case "write_file_base64": {
+      MEMORY_BIN.set(args.path, args.contents);
+      return { path: args.path, bytes: args.contents.length, mtime: new Date().toISOString(), device: 0, inode: 0 } as unknown as T;
+    }
     case "read_file_base64":
     case "read_file_binary": {
+      const bin = MEMORY_BIN.get(args.path);
+      if (bin !== undefined) return bin as unknown as T;
       const v = MEMORY_FS.get(args.path);
       if (v === undefined) throw { kind: "NotFound", path: args.path };
       try { return btoa(unescape(encodeURIComponent(v))) as unknown as T; } catch { return "" as unknown as T; }
@@ -314,7 +363,10 @@ function mock<T>(cmd: string, args?: any): T {
     case "open_with_os":
       return undefined as unknown as T;
     case "recents_get":
-      return ["/welcome.md", "/notes.md", "/hello.ts", "/README.md", "/demo/index.html", "/sample.svg"] as unknown as T;
+      return [
+        "/welcome.md", "/notes.md", "/hello.ts", "/README.md",
+        "/demo/index.html", "/sample.svg", "/sample.png", "/sample.pdf",
+      ] as unknown as T;
     case "open_file":
     case "open_folder":
     case "save_file":
@@ -393,21 +445,68 @@ export function saveFileDialog(opts: SaveDialogOptions = {}): Promise<string | n
 }
 
 /* ---------- Mode picker ---------- */
+
+/** Raster image extensions the viewer and the image editor can open. */
+export const IMAGE_EXTENSIONS = [
+  "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "avif",
+] as const;
+
+/** Extensions that must be read as bytes rather than as UTF-8 text. */
+export const BINARY_EXTENSIONS: readonly string[] = [...IMAGE_EXTENSIONS, "pdf"];
+
+/** Lowercase extension without the dot; "" when the path has none. */
+export function extname(path: string): string {
+  const base = path.split(/[\\/]/).pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  return dot <= 0 ? "" : base.slice(dot + 1).toLowerCase();
+}
+
+/** True when `path` should be loaded through `readFileBase64`. */
+export function isBinaryPath(path: string): boolean {
+  return BINARY_EXTENSIONS.includes(extname(path));
+}
+
+/** MIME type for an image extension. Falls back to PNG. */
+export function imageMime(path: string): string {
+  switch (extname(path)) {
+    case "jpg":
+    case "jpeg": return "image/jpeg";
+    case "gif":  return "image/gif";
+    case "webp": return "image/webp";
+    case "bmp":  return "image/bmp";
+    case "ico":  return "image/x-icon";
+    case "avif": return "image/avif";
+    case "svg":  return "image/svg+xml";
+    default:     return "image/png";
+  }
+}
+
 /**
  * Pick an editor mode from a file path based on its extension.
+ *  - raster images → "image" (viewer; switch to "imageedit" to edit)
+ *  - .pdf  → "pdf"
+ *  - .sparkanim → "animation"
  *  - .svg  → "svg"
  *  - .html / .htm → "html" (webview preview)
  *  - .md / .markdown → "markdown"
  *  - .json → "rich"
  *  - everything else → "code"
  */
-export function pickMode(path: string): "markdown" | "rich" | "code" | "html" | "svg" {
+export function pickMode(path: string): ModeName {
   const lower = path.toLowerCase();
+  const ext = extname(lower);
+  if ((IMAGE_EXTENSIONS as readonly string[]).includes(ext)) return "image";
+  if (ext === "pdf") return "pdf";
+  if (lower.endsWith(".sparkanim") || lower.endsWith(".anim.json")) return "animation";
   if (lower.endsWith(".svg")) return "svg";
   if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
   if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
   if (lower.endsWith(".json")) return "rich";
   return "code";
 }
+
+type ModeName =
+  | "markdown" | "rich" | "code" | "html" | "svg"
+  | "image" | "imageedit" | "animation" | "pdf";
 
 export { isTauri };

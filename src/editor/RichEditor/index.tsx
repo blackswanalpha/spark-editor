@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/editor/RichEditor/index.tsx
+   sparkBook · src/editor/RichEditor/index.tsx
    TipTap-based rich-text surface. Headless, schema-driven.
    Now includes a top toolbar, a slash-menu block-type picker,
    an inline link editor, and listeners for the global format

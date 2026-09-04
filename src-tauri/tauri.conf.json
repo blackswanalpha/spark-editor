@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "sparkEditor",
-  "version": "0.7.2",
-  "identifier": "com.sparkeditor.app",
+  "productName": "sparkBook",
+  "version": "0.8.0",
+  "identifier": "com.sparkbook.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "sparkEditor",
+        "title": "sparkBook",
         "width": 1280,
         "height": 800,
         "minWidth": 720,
@@ -32,10 +32,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "publisher": "sparkEditor team",
+    "publisher": "sparkBook team",
     "category": "DeveloperTool",
-    "shortDescription": "One window. Three modes. Markdown, rich, code.",
-    "longDescription": "sparkEditor — markdown, rich, code in one window. File is source of truth.",
+    "shortDescription": "One window. Text, images, animation and PDFs.",
+    "longDescription": "sparkBook \u2014 markdown, rich text, code, images, animation and PDFs in one window. File is source of truth.",
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",
@@ -70,7 +70,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0REYxQkZFQjA2NzUxNUEKUldSYVVXZXcvaHZmZEtreWRqUzdDaUF0S0xmR2tvOUo5TU5XZTY3SVVxZ244Um9iZVhIR1BXMG4K",
       "endpoints": [
-        "https://github.com/blackswanalpha/spark-editor/releases/latest/download/latest.json"
+        "https://github.com/blackswanalpha/spark-book/releases/latest/download/latest.json"
       ]
     }
   }
