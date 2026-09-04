@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/SplashScreen.tsx
+   sparkBook · src/shell/SplashScreen.tsx
    Boot overlay shown while the renderer initialises.
    Stages mirror the boot sequence (docs/explanation/
    state-and-persistence.md): assets → theme → IPC bridge →
@@ -89,14 +89,14 @@ export function SplashScreen({ show, ready, minDuration = 1100, onDone }: Splash
           animate="animate"
           exit="exit"
           role="status"
-          aria-label="Loading sparkEditor"
+          aria-label="Loading sparkBook"
         >
           {/* Ambient gradient glow */}
           <div className="splash__halo" aria-hidden />
 
           <motion.div className="splash__inner" variants={splashLogoVariants} initial="initial" animate="animate" exit="exit">
             <img src="/spark-mark.svg" className="splash__mark" alt="" width={56} height={56} />
-            <div className="splash__name">sparkEditor</div>
+            <div className="splash__name">sparkBook</div>
             <div className="splash__tag">The file is the source of truth.</div>
           </motion.div>
 

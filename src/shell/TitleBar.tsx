@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/TitleBar.tsx
+   sparkBook · src/shell/TitleBar.tsx
    Custom window title bar — REPLACES the OS default chrome.
    - Left:  app mark + document title (with • dirty marker)
    - Right: theme switcher + window controls (min, max, close)
@@ -38,7 +38,7 @@ export function TitleBar({ title = "Untitled", dirty, platform = "windows" }: Ti
 
   // Sync the OS window title so it always matches the renderer's view
   useEffect(() => {
-    const full = `${dirty ? "• " : ""}${title} — sparkEditor`;
+    const full = `${dirty ? "• " : ""}${title} — sparkBook`;
     try { document.title = full; } catch {}
     // getCurrentWindow() reads window.__TAURI_INTERNALS__.metadata and
     // THROWS outside Tauri — the optional call cannot catch that, so the

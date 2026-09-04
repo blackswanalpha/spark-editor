@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/Terminal/sessions.ts
+   sparkBook · src/shell/Terminal/sessions.ts
 
    The terminal panel's session list, as pure functions.
 

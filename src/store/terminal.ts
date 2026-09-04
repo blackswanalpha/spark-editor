@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/store/terminal.ts
+   sparkBook · src/store/terminal.ts
    Terminal UI store — panel visibility, the list of open terminal
    sessions, which one is in front, and whether the panel is pinned
    to the mobile viewport.

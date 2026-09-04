@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/editor/CodeEditor/languages.ts
+   sparkBook · src/editor/CodeEditor/languages.ts
    Central registry of supported programming languages and
    their CodeMirror 6 extensions.
 

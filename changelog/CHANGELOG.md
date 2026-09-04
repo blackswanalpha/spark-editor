@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **sparkEditor** are documented here.
+All notable changes to **sparkBook** are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are `YYYY-MM-DD` (EAT). See `../worklog.md` for the day-to-day build log and `../explanation.md` for design rationale.
 
@@ -92,7 +92,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 - **Terminal panel position and size moved into the terminal store**, so they can be restored per project — and so they survive a remount, which the old component-local ref could not.
 
 ### Fixed
-- **sparkEditor did not run in a browser at all.** `TitleBar`'s title-sync effect called `getCurrentWindow()` unguarded; outside Tauri that throws on `window.__TAURI_INTERNALS__.metadata`, and the optional-call syntax could not catch it, so the whole shell crashed on mount under `npm run dev`. All four window calls are now gated on `isTauri`.
+- **sparkBook did not run in a browser at all.** `TitleBar`'s title-sync effect called `getCurrentWindow()` unguarded; outside Tauri that throws on `window.__TAURI_INTERNALS__.metadata`, and the optional-call syntax could not catch it, so the whole shell crashed on mount under `npm run dev`. All four window calls are now gated on `isTauri`.
 - **The titlebar close button skipped the unsaved-changes guard.** It called `window.close()` directly, so quitting that way — the ordinary way — bypassed the dirty-buffer prompt entirely. It now routes through the shell like every other close path, which is also what lets the final workspace snapshot be written.
 - **Removed three dead bridge stubs** (`getAppState`, `setAppState`, `windowSetTitle`) that invoked Rust commands which were never implemented. They had no callers; any future one would have failed at runtime.
 
@@ -261,7 +261,7 @@ Initial public scaffolding. Usable in Vite (browser mock FS) and via Tauri when 
 - **Tauri host** — `src-tauri/src/lib.rs:38` — `HostError` (`NotFound`, `PermissionDenied`, `NotUtf8`, `IsADirectory`, `AlreadyExists`, `InvalidPath`, `Internal`) + commands `read_file`, `write_file` (returns `WriteReceipt`), `read_dir`, `stat`; plugins `dialog`, `fs`, `store`, `os`, `window-state`, `clipboard-manager`, `process`, `log`.
 - **Config** — `vite.config.ts:7` (aliases `@ui/@shell/@ir/...`, port 1420/1421), `tsconfig.json` (strict), `tauri.conf.json:13` (1280×800, CSP `default-src 'self'`), `Cargo.toml:32` (release `lto`, `opt-level s`).
 - **Documentation** — `README.md`, `explanation.md`, `description.md` (300 chars), `worklog.md`, `changelog/` (this file); `../docs/` (Diátaxis: tutorials/how-to/reference/explanation) + `../designlabs/` (static HTML prototypes + `verify_assets.py`).
-- **Packaging** — `package.json:2` `spark-editor@0.1.0`, scripts `dev/build/preview/typecheck/lint/test/tauri`.
+- **Packaging** — `package.json:2` `spark-book@0.1.0`, scripts `dev/build/preview/typecheck/lint/test/tauri`.
 
 ### Known limitations
 - File watcher (`notify` → `file:changed`) not yet wired; self-write suppression planned.

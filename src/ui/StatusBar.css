@@ -33,6 +33,12 @@
 .status__chip--markdown { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
 .status__chip--rich     { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
 .status__chip--code     { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+.status__chip--html     { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); }
+.status__chip--svg      { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.status__chip--image    { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); }
+.status__chip--imageedit{ background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.status__chip--animation{ background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
+.status__chip--pdf      { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
 .status__spacer { flex: 1; }
 .status__seg--dirty { color: var(--accent); }
 .status__lang { font-family: var(--font-code); }

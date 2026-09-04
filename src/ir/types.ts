@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ir/types.ts
+   sparkBook · src/ir/types.ts
    Intermediate representation shared by all editor surfaces.
    ============================================================ */
 

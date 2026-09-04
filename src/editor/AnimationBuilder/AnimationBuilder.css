@@ -1,0 +1,399 @@
+/* ============================================================
+   sparkBook · AnimationBuilder.css
+   Transport bar · layers | stage | properties · timeline
+   ============================================================ */
+.anim {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface-1);
+  outline: none;
+}
+
+/* ---------- Transport ---------- */
+.anim__topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px var(--sp-2);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.anim__group { display: flex; align-items: center; gap: 4px; }
+.anim__sep { width: 1px; align-self: stretch; margin: 2px 0; background: var(--border); }
+.anim__spacer { flex: 1; }
+
+.anim__time {
+  margin-left: 4px;
+  font-family: var(--font-code);
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.anim__field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.anim__field--stack { flex-direction: column; align-items: stretch; gap: 3px; }
+.anim__field > em { font-style: normal; opacity: 0.7; }
+.anim__field input[type="number"] { width: 64px; }
+.anim__field input[type="text"] { width: 100%; }
+.anim__field input[type="color"] {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+.anim__field input[type="text"],
+.anim__field input[type="number"],
+.anim__field select,
+.anim__layername,
+.anim__propRow input {
+  background: var(--surface-1);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  font-size: var(--size-xs);
+  font-family: inherit;
+}
+
+.anim__check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+  user-select: none;
+}
+.anim__check input { accent-color: var(--accent); }
+
+.anim__notice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px var(--sp-3);
+  background: var(--accent-soft);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--size-xs);
+}
+.anim__notice button {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px;
+}
+
+/* ---------- Body ---------- */
+.anim__body {
+  display: grid;
+  grid-template-columns: 190px 1fr 240px;
+  flex: 1;
+  min-height: 0;
+}
+
+.anim__layers,
+.anim__props {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--surface-1);
+  border-right: 1px solid var(--border);
+  padding: var(--sp-2);
+}
+.anim__props { border-right: 0; border-left: 1px solid var(--border); }
+
+.anim__panelhead h3 {
+  margin: 0 0 var(--sp-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.anim__hint {
+  margin: 0;
+  font-size: var(--size-xs);
+  color: var(--text-faint);
+  line-height: var(--lh-base);
+}
+.anim__addrow { display: flex; gap: 2px; margin-bottom: var(--sp-2); }
+
+.anim__layerlist { list-style: none; margin: 0; padding: 0; }
+.anim__layeritem {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.anim__layeritem:hover { background: var(--surface-2); }
+.anim__layeritem.is-active { background: var(--accent-soft); }
+.anim__layername {
+  flex: 1;
+  min-width: 0;
+  border-color: transparent;
+  background: transparent;
+}
+.anim__layername:focus { border-color: var(--border); background: var(--surface-1); }
+.anim__empty { font-size: var(--size-xs); color: var(--text-faint); padding: var(--sp-2) 0; }
+
+.anim__iconbtn {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.anim__iconbtn:hover { background: var(--surface-3); color: var(--text); }
+
+.anim__layeractions {
+  display: flex;
+  gap: 2px;
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Stage ---------- */
+.anim__stagewrap {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-4);
+  background: var(--surface-3);
+}
+.anim__stage {
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 26px rgba(0, 0, 0, 0.28);
+  touch-action: none;
+}
+
+/* ---------- Properties ---------- */
+.anim__divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--sp-2) 0;
+}
+.anim__props .anim__field { margin-bottom: 6px; }
+.anim__props .anim__field > span { min-width: 54px; }
+
+.anim__propRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.anim__proplabel {
+  flex: 1;
+  font-size: var(--size-xs);
+  color: var(--text-muted);
+}
+.anim__propRow input[type="number"] { width: 74px; }
+.anim__propRow input[type="color"] {
+  width: 32px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+
+.anim__keybtn {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.anim__keybtn:hover { background: var(--surface-2); color: var(--text); }
+/* Outlined = the property is animated; filled = a key sits at the playhead. */
+.anim__keybtn.is-animated { color: var(--accent); }
+.anim__keybtn.is-keyed { background: var(--accent); color: var(--accent-fg); }
+
+/* ---------- Timeline ---------- */
+.anim__timeline {
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  max-height: 42%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.anim__tlhead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: 4px var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+.anim__tltitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.anim__tlhint { font-size: var(--size-xs); color: var(--text-faint); }
+
+.anim__tlgrid {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+.anim__tlgutter {
+  border-right: 1px solid var(--border);
+  background: var(--surface-1);
+}
+.anim__tlrulerlabel {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-2);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+}
+.anim__tlrowlabel {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  font-size: var(--size-xs);
+  color: var(--text);
+  cursor: pointer;
+}
+.anim__tlrowlabel:hover { background: var(--surface-2); }
+.anim__tlrowlabel.is-active { background: var(--accent-soft); }
+.anim__tlname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anim__tlproplabel {
+  height: 20px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-2) 0 24px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.anim__tlproplabel--muted { color: var(--text-faint); font-style: italic; }
+
+.anim__tltracks { position: relative; min-width: 0; }
+.anim__tlruler {
+  position: relative;
+  height: 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  cursor: ew-resize;
+  overflow: hidden;
+  touch-action: none;
+}
+.anim__tick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 3px;
+  border-left: 1px solid var(--border);
+  font-size: 9px;
+  color: var(--text-faint);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.anim__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--danger);
+  pointer-events: none;
+}
+.anim__playline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--danger) 55%, transparent);
+  pointer-events: none;
+}
+
+.anim__tllayer { border-bottom: 1px solid var(--border); }
+.anim__tlrow {
+  position: relative;
+  height: 24px;
+  touch-action: none;
+}
+.anim__tlrow:hover { background: var(--surface-1); }
+.anim__tlrow.is-active { background: var(--accent-soft); }
+.anim__tlrow--prop { height: 20px; background: var(--surface-1); }
+
+.anim__kf {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  background: var(--accent);
+  border: 1px solid var(--surface-1);
+  transform: rotate(45deg);
+  cursor: ew-resize;
+}
+.anim__kf--summary { background: var(--text-muted); cursor: pointer; }
+.anim__kf.is-current { background: var(--danger); }
+
+.anim__easingbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 4px var(--sp-3);
+  border-top: 1px solid var(--border);
+  background: var(--surface-1);
+  flex-wrap: wrap;
+}
+.anim__easinglabel {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+@media (max-width: 900px) {
+  .anim__body { grid-template-columns: 150px 1fr 200px; }
+  .anim__tlgrid { grid-template-columns: 150px 1fr; }
+  .anim__tlhint { display: none; }
+}

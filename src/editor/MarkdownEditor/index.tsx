@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/editor/MarkdownEditor/index.tsx
+   sparkBook · src/editor/MarkdownEditor/index.tsx
    Markdown surface — toolbar + CodeMirror 6 editor + live
    preview pane.  The preview is built from the same raw text
    the editor holds, rendered with a tiny built-in md→html

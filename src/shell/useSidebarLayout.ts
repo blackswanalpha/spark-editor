@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/useSidebarLayout.ts
+   sparkBook · src/shell/useSidebarLayout.ts
 
    Explorer pane geometry: width, collapsed state, and the drag
    interaction that changes them. Persisted to localStorage so the

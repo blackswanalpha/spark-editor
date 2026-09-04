@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/OpenDialog.tsx
+   sparkBook · src/ui/OpenDialog.tsx
    Browser-only fallback for native open/save dialogs. Listens
    for `spark:dialog:openFile` and `spark:dialog:saveFile` events
    dispatched by @bridge/commands when not running inside Tauri.
@@ -29,6 +29,10 @@ const STATIC_FILES: string[] = [
 function fileIcon(path: string): string {
   const lower = path.toLowerCase();
   if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "mode-markdown";
+  if (lower.endsWith(".pdf")) return "mode-pdf";
+  if (lower.endsWith(".sparkanim")) return "mode-animation";
+  if (/\.(png|jpe?g|gif|webp|bmp|ico|avif)$/.test(lower)) return "mode-image";
+  if (lower.endsWith(".svg")) return "mode-svg";
   if (lower.endsWith(".ts") || lower.endsWith(".tsx") || lower.endsWith(".js") || lower.endsWith(".json") || lower.endsWith(".html")) return "file-code";
   return "file";
 }

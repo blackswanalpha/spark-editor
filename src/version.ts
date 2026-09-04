@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/version.ts
+   sparkBook · src/version.ts
    The app version, for display.
 
    `APP_VERSION` is baked in at build time from package.json. That

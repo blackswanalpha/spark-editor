@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/Terminal/grid.ts
+   sparkBook · src/shell/Terminal/grid.ts
 
    Frame -> grid reduction, kept separate from the React component
    so the paint path can be tested without a DOM.

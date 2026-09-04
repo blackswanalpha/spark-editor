@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/SideBar.tsx
+   sparkBook · src/shell/SideBar.tsx
    Left pane: folder explorer (Files) + recents tab.
    The explorer mirrors designlabs/labs/explorer.html:
      - Lazy read_dir per directory

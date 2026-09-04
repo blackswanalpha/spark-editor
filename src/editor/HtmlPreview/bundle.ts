@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/editor/HtmlPreview/bundle.ts
+   sparkBook · src/editor/HtmlPreview/bundle.ts
    No-server HTML bundler.  Rewrites a raw HTML document so
    that local assets (CSS, JS, images) are inlined via the
    Tauri bridge instead of via HTTP.  The result can be fed

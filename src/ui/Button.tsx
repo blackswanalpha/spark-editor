@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/ui/Button.tsx
+   sparkBook · src/ui/Button.tsx
    Variants: primary | secondary | ghost | danger | icon
    Sizes:    sm | md | lg
    ============================================================ */

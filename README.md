@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="screenshots/logo.png" alt="sparkEditor" width="820">
+  <img src="screenshots/logo.png" alt="sparkBook" width="820">
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@ You start a note. Halfway through, it needs a heading, then a list, then a snipp
 quote from a colleague — and suddenly you have three apps open, one document split across all of
 them, and no idea which copy is the real one.
 
-sparkEditor is the fix. One window. One document. However you need to look at it.
+sparkBook is the fix. One window. One document. However you need to look at it.
 
 <p align="center">
   <img src="screenshots/01-markdown-live-preview.png" alt="Writing markdown with the finished page beside it" width="900">
@@ -48,7 +48,7 @@ out of step.
 ### The same file, however you prefer to work
 
 Some days you want to see the raw text. Some days you want clean prose with a toolbar. Some days
-it is code and you want line numbers and colour. sparkEditor gives you five ways to look at a
+it is code and you want line numbers and colour. sparkBook gives you nine ways to look at a
 document and lets you change your mind at any moment:
 
 | | |
@@ -58,6 +58,23 @@ document and lets you change your mind at any moment:
 | **Code** | Syntax colour and line numbers for a dozen languages |
 | **HTML preview** | See a web page as a browser would, without leaving the editor |
 | **SVG** | Open a vector image and work on it directly |
+| **Image viewer** | Pan, zoom, rotate and inspect a photo without opening another app |
+| **Image editor** | Layers, brushes, shapes, selections and adjustments — the useful half of Photoshop |
+| **Animation** | A keyframe timeline over a plain-JSON scene, with a standalone HTML export |
+| **PDF** | Read, search and select text in a PDF, with thumbnails and bookmarks |
+
+### Pictures, motion and PDFs, in the same window
+
+Drop a PNG in and it opens in the viewer; one click hands the same pixels to the editor, where
+layers, a brush, a paint bucket, shapes, text and live adjustments are waiting. Save and the file
+on disk changes — no export step, no second application.
+
+The animation builder is the same idea for motion: put shapes, text or images on a stage, set
+keyframes on the timeline, scrub, and export a single self-contained HTML file that plays
+anywhere. The scene itself is readable JSON you can keep in version control.
+
+PDFs open as PDFs — pages render as you scroll, the text stays selectable, and search tells you
+which pages hold what you are looking for.
 
 <p align="center">
   <img src="screenshots/07-rich-text.png" alt="The rich text surface" width="900">
@@ -168,7 +185,7 @@ also check whenever you like from **Help → Check for Updates**.
 
 ## Building it yourself
 
-sparkEditor is a [Tauri 2](https://tauri.app) application: a React and TypeScript front end over a
+sparkBook is a [Tauri 2](https://tauri.app) application: a React and TypeScript front end over a
 small Rust host. If you want to run it from source you need Node 20+, a stable Rust toolchain, and
 Tauri's [system prerequisites](https://tauri.app/start/prerequisites/).
 

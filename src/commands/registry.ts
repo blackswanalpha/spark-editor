@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/commands/registry.ts
+   sparkBook · src/commands/registry.ts
    Central command table consumed by the palette, the menu,
    the title bar's MenuMirror, and keybinding dispatch.
    ============================================================ */
@@ -7,11 +7,13 @@ import { useDocs, type DocMode } from "@store/documents";
 import { useTerminal, activeSession } from "@store/terminal";
 import {
   readFile,
-  recentsAdd,
   openFileDialog,
   openFolderDialog,
-  pickMode,
 } from "@bridge/commands";
+import { openPath } from "@shell/openDocument";
+import { checkpointOpenWindow } from "@bridge/checkpoint";
+import { useProjects } from "@store/projects";
+import { emptyScene, serializeScene } from "@editor/AnimationBuilder/model";
 
 export interface CommandSpec {
   id: string;
@@ -130,8 +132,13 @@ export function buildCommands(): CommandSpec[] {
       icon: "mode-code",
       run: () => {
         const a = active(); if (!a) return;
-        const order: DocMode[] = ["markdown", "rich", "code", "html", "svg"];
-        const next = order[(order.indexOf(a.mode) + 1) % order.length];
+        // Binary documents cycle only between their own two surfaces:
+        // reading base64 as source text is never what the user meant.
+        const order: DocMode[] = a.binary
+          ? ["image", "imageedit"]
+          : ["markdown", "rich", "code", "html", "svg"];
+        const at = order.indexOf(a.mode);
+        const next = order[(at < 0 ? 0 : at + 1) % order.length];
         useDocs.getState().setMode(a.id, next);
       },
     },
@@ -145,11 +152,37 @@ export function buildCommands(): CommandSpec[] {
       run: runIfActive((a) => { useDocs.getState().setMode(a.id, "svg"); }) },
     { id: "view.code",     title: "Switch to Code",      category: "View", icon: "mode-code",
       run: runIfActive((a) => { useDocs.getState().setMode(a.id, "code"); }) },
+    { id: "view.image",    title: "Switch to Image Viewer", category: "View", icon: "mode-image",
+      keywords: ["picture", "photo", "png", "jpeg", "preview"],
+      run: runIfActive((a) => { useDocs.getState().setMode(a.id, "image"); }) },
+    { id: "view.imageEdit", title: "Switch to Image Editor", category: "View", icon: "mode-imageedit",
+      keywords: ["paint", "retouch", "layers", "photoshop", "brush"],
+      run: runIfActive((a) => { useDocs.getState().setMode(a.id, "imageedit"); }) },
 
     {
       id: "file.new", title: "New Document", category: "File",
       icon: "plus", shortcut: mod("N"),
       run: () => { docs.open({ name: "Untitled", mode: "markdown", raw: "" }); },
+    },
+    {
+      id: "file.newImage", title: "New Image", category: "File",
+      icon: "mode-imageedit",
+      keywords: ["canvas", "paint", "draw", "png", "blank"],
+      run: () => {
+        useDocs.getState().open({ name: "Untitled.png", mode: "imageedit", raw: "", binary: true });
+      },
+    },
+    {
+      id: "file.newAnimation", title: "New Animation", category: "File",
+      icon: "mode-animation",
+      keywords: ["timeline", "keyframe", "motion", "sparkanim"],
+      run: () => {
+        useDocs.getState().open({
+          name: "Untitled.sparkanim",
+          mode: "animation",
+          raw: serializeScene(emptyScene()),
+        });
+      },
     },
     {
       id: "file.open", title: "Open File…", category: "File",
@@ -159,9 +192,7 @@ export function buildCommands(): CommandSpec[] {
         if (result == null) return;
         const path = Array.isArray(result) ? result[0] : result;
         if (!path) return;
-        const text = await readFile(path);
-        docs.open({ name: path.split("/").pop() || "untitled", path, mode: pickMode(path), raw: text });
-        await recentsAdd(path);
+        await openPath(path);
       },
     },
     {
@@ -251,10 +282,25 @@ export function buildCommands(): CommandSpec[] {
       run: () => { const a = active(); if (a) window.dispatchEvent(new CustomEvent("spark:tab:close:request", { detail: { id: a.id } })); },
     },
 
+    /* The image editor keeps its own layer-stack history; the text store's
+       raw-string undo cannot express it, so those modes get the event and
+       everything else goes through the store as before. */
     { id: "edit.undo", title: "Undo", category: "Edit", icon: "undo",  shortcut: mod("Z"),
-      run: runIfActive((a) => { useDocs.getState().undo(a.id); }) },
+      run: runIfActive((a) => {
+        if (a.mode === "imageedit") {
+          window.dispatchEvent(new CustomEvent("spark:surface:undo", { detail: { docId: a.id } }));
+          return;
+        }
+        useDocs.getState().undo(a.id);
+      }) },
     { id: "edit.redo", title: "Redo", category: "Edit", icon: "redo",  shortcut: mod("Shift+Z"),
-      run: runIfActive((a) => { useDocs.getState().redo(a.id); }) },
+      run: runIfActive((a) => {
+        if (a.mode === "imageedit") {
+          window.dispatchEvent(new CustomEvent("spark:surface:redo", { detail: { docId: a.id } }));
+          return;
+        }
+        useDocs.getState().redo(a.id);
+      }) },
     {
       id: "code.goToLine", title: "Go to Line", category: "Edit",
       icon: "search", shortcut: mod("G"),
@@ -346,6 +392,26 @@ export function buildCommands(): CommandSpec[] {
 
     /* ---------- Window ---------- */
     {
+      id: "window.new", title: "New Window", category: "Window",
+      icon: "open", shortcut: mod("Shift+N"),
+      keywords: ["window", "new", "second", "split", "project"],
+      run: async () => {
+        // The host allocates the label and seeds the new window's row
+        // before the webview exists, so it opens straight into this
+        // project rather than booting empty and then being told.
+        try {
+          await checkpointOpenWindow(useProjects.getState().activeId);
+        } catch (e: unknown) {
+          window.dispatchEvent(new CustomEvent("spark:toast:error", {
+            detail: {
+              title: "Could not open a new window",
+              body: String((e as Error)?.message ?? e),
+            },
+          }));
+        }
+      },
+    },
+    {
       id: "window.minimize", title: "Minimize", category: "Window",
       icon: "minimize",
       run: () => { window.dispatchEvent(new CustomEvent("spark:window:minimize")); },
@@ -363,7 +429,7 @@ export function buildCommands(): CommandSpec[] {
 
     /* ---------- Help ---------- */
     {
-      id: "help.about", title: "About sparkEditor", category: "Help",
+      id: "help.about", title: "About sparkBook", category: "Help",
       icon: "command",
       run: () => { window.dispatchEvent(new CustomEvent("spark:help:about", { detail: { silent: true } })); },
     },

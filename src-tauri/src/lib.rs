@@ -1,3 +1,4 @@
+mod checkpoint;
 mod pty;
 mod update_env;
 mod watch;
@@ -339,6 +340,61 @@ fn read_file_base64(path: String) -> Result<String, HostError> {
     Ok(encode_base64(&bytes))
 }
 
+#[tauri::command]
+fn write_file_base64(path: String, contents: String) -> Result<WriteReceipt, HostError> {
+    let bytes = decode_base64(&contents).ok_or_else(|| HostError::Internal {
+        message: "contents is not valid base64".to_string(),
+    })?;
+    std::fs::write(&path, &bytes)?;
+    let meta = std::fs::metadata(&path)?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .and_then(|d| chrono::DateTime::<chrono::Utc>::from_timestamp(d.as_secs() as i64, 0))
+        .map(|dt| dt.to_rfc3339())
+        .unwrap_or_default();
+    Ok(WriteReceipt {
+        path,
+        bytes: bytes.len(),
+        mtime,
+        device: 0,
+        inode: 0,
+    })
+}
+
+/// Decode standard base64 (with or without `=` padding). Whitespace and
+/// newlines are skipped so a wrapped data-URI payload decodes as-is.
+/// Returns `None` on any character outside the alphabet.
+fn decode_base64(input: &str) -> Option<Vec<u8>> {
+    fn val(c: u8) -> Option<u32> {
+        match c {
+            b'A'..=b'Z' => Some((c - b'A') as u32),
+            b'a'..=b'z' => Some((c - b'a') as u32 + 26),
+            b'0'..=b'9' => Some((c - b'0') as u32 + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::with_capacity(input.len() / 4 * 3);
+    let mut acc: u32 = 0;
+    let mut bits = 0u32;
+    for &c in input.as_bytes() {
+        if c == b'=' || c.is_ascii_whitespace() {
+            continue;
+        }
+        let v = val(c)?;
+        acc = (acc << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push(((acc >> bits) & 0xFF) as u8);
+        }
+    }
+    Some(out)
+}
+
 fn encode_base64(input: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
@@ -425,6 +481,12 @@ fn recents_clear(app: tauri::AppHandle) -> Result<(), HostError> {
     Ok(())
 }
 
+/// Labels the checkpoint may open. Fixed rather than derived so the
+/// window-state plugin's denylist can be built before any window exists.
+const CHECKPOINT_LABELS: [&str; checkpoint::MAX_WINDOWS] = [
+    "editor-1", "editor-2", "editor-3", "editor-4", "editor-5", "editor-6", "editor-7", "editor-8",
+];
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -433,7 +495,15 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // The checkpoint owns the geometry of the windows it reopens, so
+        // the window-state plugin is kept off those labels: two authorities
+        // for one window's position is how a window ends up somewhere
+        // neither of them chose.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&CHECKPOINT_LABELS)
+                .build(),
+        )
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_process::init())
         // Trace is far too loud for a shipped app: notify alone logs a
@@ -458,12 +528,14 @@ pub fn run() {
                 .level_for("polling", log::LevelFilter::Warn)
                 .build(),
         )
+        .manage(checkpoint::CheckpointManager::default())
         .manage(pty::PtyManager::default())
         .manage(watch::WatchManager::default())
         .invoke_handler(tauri::generate_handler![
             read_file,
             read_file_base64,
             write_file,
+            write_file_base64,
             read_dir,
             stat,
             create_file,
@@ -477,6 +549,12 @@ pub fn run() {
             recents_get,
             recents_add,
             recents_clear,
+            checkpoint::checkpoint_load,
+            checkpoint::checkpoint_claim_restore,
+            checkpoint::checkpoint_save_window,
+            checkpoint::checkpoint_save_project,
+            checkpoint::checkpoint_remove_project,
+            checkpoint::checkpoint_open_window,
             pty::pty_spawn,
             pty::pty_write,
             pty::pty_resize,
@@ -492,34 +570,58 @@ pub fn run() {
             watch::watch_path,
             watch::unwatch_path,
         ])
+        .setup(|app| {
+            let handle = app.handle().clone();
+            let manager = app.state::<checkpoint::CheckpointManager>();
+            checkpoint::init(&handle, &manager);
+            Ok(())
+        })
         .on_window_event(|window, event| {
-            // Closing the main window must not leave orphaned shells
-            // holding the app alive in the background.
+            // A closing window takes its own resources and nothing else.
+            // It used to be that "main" closing tore down every shell and
+            // every watcher in the process, which was right when main was
+            // the only editor window and is a way to kill three other
+            // windows' terminals now that it is not.
             if let tauri::WindowEvent::Destroyed = event {
                 let handle = window.app_handle();
-                if window.label() == "main" {
-                    if let Some(manager) = handle.try_state::<pty::PtyManager>() {
-                        pty::shutdown_all(&manager);
+                let label = window.label();
+                if let Some(manager) = handle.try_state::<pty::PtyManager>() {
+                    pty::shutdown_window(&manager, label);
+                }
+                if let Some(manager) = handle.try_state::<watch::WatchManager>() {
+                    watch::shutdown_window(&manager, label);
+                }
+                if checkpoint::tracks_window(label) {
+                    if let Some(manager) = handle.try_state::<checkpoint::CheckpointManager>() {
+                        checkpoint::on_window_destroyed(&manager, label);
                     }
-                    if let Some(manager) = handle.try_state::<watch::WatchManager>() {
-                        watch::shutdown_all(&manager);
-                    }
-                } else if let Some(manager) = handle.try_state::<pty::PtyManager>() {
-                    // A pop-out terminal closing takes only its own shells.
-                    pty::shutdown_window(&manager, window.label());
                 }
             }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                if let Some(manager) = app.try_state::<pty::PtyManager>() {
-                    pty::shutdown_all(&manager);
+            match event {
+                // Windows are destroyed after this, and a window
+                // destroyed on the way out must keep its row: that table
+                // is the session the next launch reopens.
+                tauri::RunEvent::ExitRequested { .. } => {
+                    if let Some(manager) = app.try_state::<checkpoint::CheckpointManager>() {
+                        checkpoint::mark_exiting(&manager);
+                    }
                 }
-                if let Some(manager) = app.try_state::<watch::WatchManager>() {
-                    watch::shutdown_all(&manager);
+                tauri::RunEvent::Exit => {
+                    if let Some(manager) = app.try_state::<checkpoint::CheckpointManager>() {
+                        checkpoint::mark_exiting(&manager);
+                    }
+                    if let Some(manager) = app.try_state::<pty::PtyManager>() {
+                        pty::shutdown_all(&manager);
+                    }
+                    if let Some(manager) = app.try_state::<watch::WatchManager>() {
+                        watch::shutdown_all(&manager);
+                    }
                 }
+                _ => {}
             }
         });
 }

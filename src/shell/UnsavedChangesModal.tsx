@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/UnsavedChangesModal.tsx
+   sparkBook · src/shell/UnsavedChangesModal.tsx
    Tri-state confirmation shown when a destructive action would
    discard unsaved work. Controlled — the parent owns open state
    and performs the actual save / discard / abort.

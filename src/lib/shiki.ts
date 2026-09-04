@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/lib/shiki.ts
+   sparkBook · src/lib/shiki.ts
    Shiki-based code highlighter. Loaded lazily to keep the
    initial bundle small; the highlight API uses a singleton
    highlighter so subsequent calls are sync.

@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/Terminal/useCellMetrics.ts
+   sparkBook · src/shell/Terminal/useCellMetrics.ts
 
    Measures one monospace cell so the grid can convert pixels to
    rows/cols. Measuring beats hard-coding: the user's font stack,

@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/Terminal/TerminalView.tsx
+   sparkBook · src/shell/Terminal/TerminalView.tsx
 
    The terminal surface. A real shell runs in the Rust host; this
    component owns four jobs and nothing else:

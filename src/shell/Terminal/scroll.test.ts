@@ -1,4 +1,4 @@
-/* sparkEditor — terminal viewport scrolling */
+/* sparkBook — terminal viewport scrolling */
 import { describe, expect, it } from "vitest";
 
 import {

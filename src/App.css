@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/App.css
+   sparkBook · src/App.css
    Shell layout.
    ============================================================ */
 .app {
@@ -122,6 +122,17 @@ body:has(.app__sidebar-resizer.is-dragging) iframe {
 .app__status-wrap { display: contents; }
 .app__editor  { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .app__editor-inner { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* Code-split surfaces (image, animation, PDF) show this while their
+   chunk loads. Sized like the editor so the pane does not jump. */
+.app__surface-loading {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: var(--size-sm);
+}
 
 .empty {
   flex: 1;

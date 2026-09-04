@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/lib/themeTokens.ts
+   sparkBook · src/lib/themeTokens.ts
    Bridge from the editor's CSS theme tokens to Shiki themes.
    Keeping these in sync with src/theme/tokens.css is the
    design contract for the five themes. Values below are generated

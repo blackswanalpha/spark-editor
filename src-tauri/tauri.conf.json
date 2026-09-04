@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "sparkEditor",
+  "productName": "sparkBook",
   "version": "0.7.2",
-  "identifier": "com.sparkeditor.app",
+  "identifier": "com.sparkbook.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "sparkEditor",
+        "title": "sparkBook",
         "width": 1280,
         "height": 800,
         "minWidth": 720,
@@ -32,10 +32,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "publisher": "sparkEditor team",
+    "publisher": "sparkBook team",
     "category": "DeveloperTool",
-    "shortDescription": "One window. Three modes. Markdown, rich, code.",
-    "longDescription": "sparkEditor — markdown, rich, code in one window. File is source of truth.",
+    "shortDescription": "One window. Text, images, animation and PDFs.",
+    "longDescription": "sparkBook — markdown, rich text, code, images, animation and PDFs in one window. File is source of truth.",
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",

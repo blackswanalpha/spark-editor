@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/PluginRail.tsx
+   sparkBook · src/shell/PluginRail.tsx
    Hairline plugin rail pinned left-of-explorer.
    - 51px wide, icons-only vertical strip
    - Hairline right border (1px solid var(--border))

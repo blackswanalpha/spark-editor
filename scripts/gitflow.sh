@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# sparkEditor — Gitflow helper
+# sparkBook — Gitflow helper
 # Wraps common gitflow operations + CI gate + GitHub PR automation.
 #
 # Usage:
@@ -221,7 +221,7 @@ EOF
 
 cmd_help() {
   cat <<'EOF'
-sparkEditor gitflow — helpers
+sparkBook gitflow — helpers
 
   bash scripts/gitflow.sh branch <type> <name>   create feature/release/hotfix branch
   bash scripts/gitflow.sh sync                   fetch + rebase current branch

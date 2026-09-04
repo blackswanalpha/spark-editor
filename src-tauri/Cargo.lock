@@ -3592,7 +3592,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spark-editor"
+name = "spark-book"
 version = "0.7.2"
 dependencies = [
  "anyhow",

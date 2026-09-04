@@ -1,5 +1,5 @@
 /* ============================================================
-   sparkEditor · src/shell/WelcomeWizard.tsx
+   sparkBook · src/shell/WelcomeWizard.tsx
    First-run welcome wizard — 3 steps (intro → theme pick →
    ready), ported from designlabs/labs/onboarding.html.
    Esc skips; focus moves to the primary control of each step
@@ -14,7 +14,7 @@ import { markOnboarded } from "./firstRun";
 import { useAppVersion } from "@version";
 import "./WelcomeWizard.css";
 
-const STEP_TITLES = ["Welcome to sparkEditor", "Pick a theme", "You're all set"] as const;
+const STEP_TITLES = ["Welcome to sparkBook", "Pick a theme", "You're all set"] as const;
 
 const THEME_OPTIONS: { id: ThemeId; label: string; hint: string }[] = [
   { id: "system", label: "System", hint: "Follow the OS appearance" },
@@ -116,7 +116,7 @@ export function WelcomeWizard({ open, onOpenChange }: WelcomeWizardProps) {
             {step === 1 && (
               <div className="wizard__step" data-step="theme">
                 <p className="wizard__lede">
-                  Choose how sparkEditor looks. You can change this any time in the command palette (Theme).
+                  Choose how sparkBook looks. You can change this any time in the command palette (Theme).
                 </p>
                 <div className="wizard__themes" role="radiogroup" aria-label="Theme">
                   {THEME_OPTIONS.map((opt) => (
